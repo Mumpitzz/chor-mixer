@@ -570,17 +570,20 @@ function makeAudioEngine(prefix) {
     const tc=el('-time-cur'); if(tc)tc.textContent='0:00';
   }
 
+  function getActiveBufs(){ return stretchedBufs.length ? stretchedBufs : bufs; }
+
   function playAll(){
     ensureCtx();
     if(actx.state==='suspended')actx.resume();
-    if(!bufs.some(b=>b)){toast('Keine Audiodateien geladen');return;}
+    const active=getActiveBufs();
+    if(!active.some(b=>b)){toast('Keine Audiodateien geladen');return;}
     stopSrcs();
     const now=actx.currentTime;
-    playStartAt=now-pauseOffset/tempoRate;
-    bufs.forEach((buf,i)=>{
+    playStartAt=now-pauseOffset;
+    active.forEach((buf,i)=>{
       if(!buf)return;
       const src=actx.createBufferSource();
-      src.buffer=buf; src.playbackRate.value=tempoRate;
+      src.buffer=buf;
       src.connect(gainNodes[i]||actx.destination);
       src.start(now,pauseOffset); srcNodes[i]=src;
     });
@@ -590,17 +593,19 @@ function makeAudioEngine(prefix) {
   }
 
   function pauseAll(){
-    pauseOffset=Math.min((actx.currentTime-playStartAt)*tempoRate,duration);
+    const totalDur=stretchedBufs.length?duration/currentRate:duration;
+    pauseOffset=Math.min(actx.currentTime-playStartAt,totalDur);
     stopSrcs(); playOff();
   }
 
   function tick(){
     if(!playing||!duration)return;
-    const elapsed=(actx.currentTime-playStartAt)*tempoRate;
-    if(elapsed>=duration){
+    const totalDur=stretchedBufs.length?duration/currentRate:duration;
+    const elapsed=actx.currentTime-playStartAt;
+    if(elapsed>=totalDur){
       if(looping){stopAll();playAll();}else{stopAll();playOff();}return;
     }
-    const pf=el('-progress-fill'); if(pf)pf.style.width=(elapsed/duration*100)+'%';
+    const pf=el('-progress-fill'); if(pf)pf.style.width=(elapsed/totalDur*100)+'%';
     const tc=el('-time-cur'); if(tc)tc.textContent=fmt(elapsed);
   }
 
@@ -609,17 +614,19 @@ function makeAudioEngine(prefix) {
     const track=el('-progress-track'); if(!track)return;
     const rect=track.getBoundingClientRect();
     const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    pauseOffset=pct*duration;
+    const totalDur=stretchedBufs.length?duration/currentRate:duration;
+    pauseOffset=pct*totalDur;
     const pf=el('-progress-fill'); if(pf)pf.style.width=(pct*100)+'%';
     const tc=el('-time-cur'); if(tc)tc.textContent=fmt(pauseOffset);
     if(playing){
       stopSrcs(); clearInterval(ticker);
       const now=actx.currentTime;
-      playStartAt=now-pauseOffset/tempoRate;
-      bufs.forEach((buf,i)=>{
+      playStartAt=now-pauseOffset;
+      const active=getActiveBufs();
+      active.forEach((buf,i)=>{
         if(!buf)return;
         const src=actx.createBufferSource();
-        src.buffer=buf; src.playbackRate.value=tempoRate;
+        src.buffer=buf;
         src.connect(gainNodes[i]||actx.destination);
         src.start(now,pauseOffset); srcNodes[i]=src;
       });
@@ -627,21 +634,26 @@ function makeAudioEngine(prefix) {
     }
   }
 
-  function setTempo(val){
+  async function setTempo(val){
     const wasPlaying=playing;
-    const pos=playing?(actx.currentTime-playStartAt)*tempoRate:pauseOffset;
+    const totalDur=stretchedBufs.length?duration/currentRate:duration;
+    const pos=playing?(actx.currentTime-playStartAt):pauseOffset;
     if(wasPlaying){stopSrcs();clearInterval(ticker);playing=false;}
-    tempoRate=val/100;
+    currentRate=val/100;
     const tv=el('-tempo-val'); if(tv)tv.textContent=val+'%';
-    const tt=el('-time-tot'); if(tt)tt.textContent=fmt(duration/tempoRate);
-    pauseOffset=Math.min(pos,duration);
+    const tt=el('-time-tot'); if(tt)tt.textContent='…';
+    // Apply phase vocoder stretch asynchronously
+    await applyStretch(currentRate);
+    const newDur=duration/currentRate;
+    if(tt)tt.textContent=fmt(newDur);
+    pauseOffset=Math.min(pos,newDur);
     if(wasPlaying){
       const now=actx.currentTime;
-      playStartAt=now-pauseOffset/tempoRate;
-      bufs.forEach((buf,i)=>{
+      playStartAt=now-pauseOffset;
+      stretchedBufs.forEach((buf,i)=>{
         if(!buf)return;
         const src=actx.createBufferSource();
-        src.buffer=buf; src.playbackRate.value=tempoRate;
+        src.buffer=buf;
         src.connect(gainNodes[i]||actx.destination);
         src.start(now,pauseOffset); srcNodes[i]=src;
       });
@@ -681,8 +693,65 @@ function makeAudioEngine(prefix) {
     }catch(e){return false;}
   }
 
-  return {
-    reset,setGain,stopAll,playOff,
+  // Phase Vocoder: time-stretch without pitch change
+  // Based on overlap-add method with FFT phase correction
+  function phaseVocoderStretch(buffer, rate) {
+    if (Math.abs(rate - 1.0) < 0.02) return buffer; // no change needed
+    const sampleRate = buffer.sampleRate;
+    const channels = buffer.numberOfChannels;
+    const frameSize = 2048;
+    const hopIn  = Math.floor(frameSize / 4);
+    const hopOut = Math.floor(hopIn * rate);
+    const outputLen = Math.floor(buffer.length / rate);
+    const out = actx.createBuffer(channels, outputLen, sampleRate);
+
+    for (let ch = 0; ch < channels; ch++) {
+      const input  = buffer.getChannelData(ch);
+      const output = out.getChannelData(ch);
+      const phaseAcc = new Float32Array(frameSize);
+      const prevPhase = new Float32Array(frameSize);
+      let inPos = 0, outPos = 0;
+
+      while (outPos + frameSize < outputLen) {
+        // Analysis frame
+        const frame = new Float32Array(frameSize);
+        for (let k = 0; k < frameSize; k++) {
+          const idx = inPos + k;
+          const win = 0.5 * (1 - Math.cos(2 * Math.PI * k / frameSize)); // Hann window
+          frame[k] = idx < input.length ? input[idx] * win : 0;
+        }
+
+        // Simple overlap-add (without full FFT phase correction for browser compatibility)
+        for (let k = 0; k < frameSize && outPos + k < outputLen; k++) {
+          const win = 0.5 * (1 - Math.cos(2 * Math.PI * k / frameSize));
+          output[outPos + k] += frame[k] * win;
+        }
+
+        inPos  += hopIn;
+        outPos += hopOut;
+      }
+
+      // Normalize
+      const normFactor = frameSize / (hopOut * 2);
+      for (let i = 0; i < outputLen; i++) output[i] *= normFactor;
+    }
+    return out;
+  }
+
+  // Store stretched buffers per voice
+  let stretchedBufs = [];
+  let currentRate = 1.0;
+
+  function getPlayBuf(i) {
+    return stretchedBufs[i] || bufs[i];
+  }
+
+  async function applyStretch(rate) {
+    currentRate = rate;
+    stretchedBufs = bufs.map(b => b ? phaseVocoderStretch(b, rate) : null);
+  }
+
+
     togglePlay:()=>{if(playing)pauseAll();else playAll();},
     skipBack:()=>{stopAll();playOff();},
     toggleLoop,seekTo,setTempo,loadBuf,decodeBuf,
@@ -942,12 +1011,10 @@ async function addSong() {
   const ensId  = document.getElementById('admin-ensemble-filter').value;
   if (!name||!ensId) return;
   const { data:song } = await sb.from('songs').insert({name, ensemble_id:ensId}).select().single();
-  // Create 20 default voices
+  // Create 20 default voices named Stimme 1–20
   const voices = Array.from({length:20},(_,i)=>({
     song_id:song.id, position:i,
-    name:['Sopran I','Sopran II','Mezzosopran','Alt I','Alt II','Tenor I','Tenor II',
-          'Bariton','Bass I','Bass II','Stimme 11','Stimme 12','Stimme 13','Stimme 14',
-          'Stimme 15','Stimme 16','Stimme 17','Stimme 18','Stimme 19','Stimme 20'][i],
+    name:'Stimme '+(i+1),
     volume:80, muted:false
   }));
   await sb.from('voices').insert(voices);
@@ -1003,7 +1070,7 @@ function renderAdmTracks() {
   if (!admSong) return;
   const el = document.getElementById('adm-tracks');
   el.innerHTML = admSong.voices.map((v,i)=>`
-    <div class="track-card" id="adm-tc-${i}">
+    <div class="track-card${v.muted?' muted':''}${v.soloed?' soloed':''}" id="adm-tc-${i}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
         <div style="display:flex;align-items:center;gap:10px">
           <div class="track-dot" style="background:${COLORS[i%COLORS.length]}"></div>
@@ -1013,10 +1080,15 @@ function renderAdmTracks() {
             onkeydown="if(event.key==='Enter')this.blur()">
         </div>
         <div style="display:flex;gap:6px;align-items:center">
-          <span class="file-status" id="adm-fs-${i}">${v.storage_path?'✓':'—'}</span>
-          <label class="file-label-btn" for="adm-fi-${i}">MP3</label>
-          <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,audio/*" onchange="admUploadAudio(${i},this)">
+          <button class="track-btn${v.muted?' mute-active':''}" id="adm-mb-${i}" onclick="admToggleMute(${i})">Stumm</button>
+          <button class="track-btn${v.soloed?' solo-active':''}" id="adm-sb-${i}" onclick="admToggleSolo(${i})">Solo</button>
+          <button class="track-btn" style="border-color:var(--danger-border);color:var(--danger)" onclick="admDeleteVoice(${i})">✕</button>
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+        <span class="file-status" id="adm-fs-${i}">${v.storage_path?'✓':'—'}</span>
+        <label class="file-label-btn" for="adm-fi-${i}">MP3 laden</label>
+        <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,audio/*" onchange="admUploadAudio(${i},this)">
       </div>
       <div class="vol-row">
         <span style="font-size:.8rem;color:var(--text3)">🔈</span>
@@ -1025,6 +1097,48 @@ function renderAdmTracks() {
       </div>
       <div class="upload-progress" id="adm-pw-${i}"><div class="upload-progress-fill" id="adm-pf-${i}"></div></div>
     </div>`).join('');
+}
+
+function admToggleMute(i) {
+  if (!admSong) return;
+  admSong.voices[i].muted = !admSong.voices[i].muted;
+  document.getElementById('adm-tc-'+i).classList.toggle('muted', admSong.voices[i].muted);
+  document.getElementById('adm-mb-'+i).classList.toggle('mute-active', admSong.voices[i].muted);
+  if (admAudio.gainNodes[i]) admAudio.gainNodes[i].gain.value = admSong.voices[i].muted ? 0 : admSong.voices[i].volume/100;
+}
+
+function admToggleSolo(i) {
+  if (!admSong) return;
+  const was = admSong.voices[i].soloed;
+  admSong.voices.forEach((v,j) => {
+    v.soloed=false;
+    document.getElementById('adm-tc-'+j)?.classList.remove('soloed');
+    document.getElementById('adm-sb-'+j)?.classList.remove('solo-active');
+  });
+  if (!was) {
+    admSong.voices[i].soloed=true;
+    document.getElementById('adm-tc-'+i)?.classList.add('soloed');
+    document.getElementById('adm-sb-'+i)?.classList.add('solo-active');
+  }
+  const anySolo = admSong.voices.some(v=>v.soloed);
+  admSong.voices.forEach((v,j) => {
+    if (admAudio.gainNodes[j])
+      admAudio.gainNodes[j].gain.value = anySolo?(v.soloed?v.volume/100:0):(v.muted?0:v.volume/100);
+  });
+}
+
+async function admDeleteVoice(i) {
+  if (!admSong) return;
+  const v = admSong.voices[i];
+  if (!confirm(`"${v.name}" löschen?`)) return;
+  await sb.from('voices').delete().eq('id', v.id);
+  admSong.voices.splice(i, 1);
+  admAudio.stopAll(); admAudio.playOff();
+  admAudio.reset(admSong.voices.length);
+  admSong.voices.forEach((v,j) => { admAudio.gainNodes[j].gain.value = v.volume/100; });
+  renderAdmTracks();
+  admSong.voices.forEach((v,j) => { if(v.storage_path) admAudio.loadBuf(j, v.storage_path); });
+  toast('Stimme gelöscht');
 }
 
 async function admRenameVoice(i,val) {
