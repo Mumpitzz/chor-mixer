@@ -751,7 +751,8 @@ function makeAudioEngine(prefix) {
     stretchedBufs = bufs.map(b => b ? phaseVocoderStretch(b, rate) : null);
   }
 
-
+  return {
+    reset,setGain,stopAll,playOff,
     togglePlay:()=>{if(playing)pauseAll();else playAll();},
     skipBack:()=>{stopAll();playOff();},
     toggleLoop,seekTo,setTempo,loadBuf,decodeBuf,
