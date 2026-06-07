@@ -9,6 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/soundtouchjs/0.1.30/soundtouch.min.js"></script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -18,75 +19,49 @@
     }
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
     body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-
-    /* ── SCREENS ── */
     .screen{display:none;min-height:100vh}
     .screen.active{display:flex;flex-direction:column}
 
-    /* ── LOGIN ── */
+    /* LOGIN */
     #screen-login{align-items:center;justify-content:center;padding:2rem;
       background:radial-gradient(ellipse at 50% 0%,#2a1f5e 0%,var(--bg) 60%)}
-    .login-logo{font-family:'Playfair Display',serif;font-size:2.2rem;color:var(--accent2);
-      margin-bottom:.3rem;text-align:center}
-    .login-sub{font-size:.85rem;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;
-      margin-bottom:2.5rem;text-align:center}
-    .login-card{background:var(--surface);border:1px solid var(--surface3);border-radius:var(--radius);
-      padding:2rem;width:100%;max-width:360px}
-    .login-tabs{display:flex;margin-bottom:1.5rem;border-radius:var(--radius-sm);
-      background:var(--surface2);padding:3px;gap:3px}
-    .login-tab{flex:1;padding:.5rem;text-align:center;font-size:.82rem;border-radius:6px;
-      cursor:pointer;color:var(--text3);transition:all .15s}
+    .login-logo{font-family:'Playfair Display',serif;font-size:2.2rem;color:var(--accent2);margin-bottom:.3rem;text-align:center}
+    .login-sub{font-size:.85rem;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:2.5rem;text-align:center}
+    .login-card{background:var(--surface);border:1px solid var(--surface3);border-radius:var(--radius);padding:2rem;width:100%;max-width:360px}
+    .login-tabs{display:flex;margin-bottom:1.5rem;border-radius:var(--radius-sm);background:var(--surface2);padding:3px;gap:3px}
+    .login-tab{flex:1;padding:.5rem;text-align:center;font-size:.82rem;border-radius:6px;cursor:pointer;color:var(--text3);transition:all .15s}
     .login-tab.active{background:var(--surface3);color:var(--text)}
-    .field-label{font-size:.78rem;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;
-      margin-bottom:.4rem;display:block}
-    .field-input{width:100%;background:var(--surface2);border:1px solid var(--surface3);
-      border-radius:var(--radius-sm);padding:.7rem 1rem;color:var(--text);
-      font-family:'DM Sans',sans-serif;font-size:.95rem;margin-bottom:1rem;outline:none;
-      transition:border-color .2s}
+    .field-label{font-size:.78rem;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:.4rem;display:block}
+    .field-input{width:100%;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.7rem 1rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.95rem;margin-bottom:1rem;outline:none;transition:border-color .2s}
     .field-input:focus{border-color:var(--accent)}
-    .btn-primary{width:100%;background:var(--accent);color:#1a1a00;border:none;
-      border-radius:var(--radius-sm);padding:.85rem;font-family:'DM Sans',sans-serif;
-      font-size:.95rem;font-weight:500;cursor:pointer;transition:background .2s}
+    .btn-primary{width:100%;background:var(--accent);color:#1a1a00;border:none;border-radius:var(--radius-sm);padding:.85rem;font-family:'DM Sans',sans-serif;font-size:.95rem;font-weight:500;cursor:pointer;transition:background .2s}
     .btn-primary:hover{background:var(--accent2)}
-    .login-error{color:var(--danger);font-size:.82rem;margin-top:.75rem;
-      text-align:center;display:none}
+    .login-error{color:var(--danger);font-size:.82rem;margin-top:.75rem;text-align:center;display:none}
 
-    /* ── APP SHELL ── */
-    .app-header{background:var(--surface);border-bottom:1px solid var(--surface3);
-      padding:.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;
-      position:sticky;top:0;z-index:100;flex-shrink:0}
+    /* APP */
+    .app-header{background:var(--surface);border-bottom:1px solid var(--surface3);padding:.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-shrink:0}
     .header-title{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--accent2)}
-    .header-badge{font-size:.7rem;background:var(--surface2);border:1px solid var(--surface3);
-      border-radius:20px;padding:3px 10px;color:var(--text3);margin-left:8px}
+    .header-badge{font-size:.7rem;background:var(--surface2);border:1px solid var(--surface3);border-radius:20px;padding:3px 10px;color:var(--text3);margin-left:8px}
     .header-actions{display:flex;gap:8px}
-    .icon-btn{background:var(--surface2);border:1px solid var(--surface3);
-      border-radius:var(--radius-sm);width:36px;height:36px;display:flex;
-      align-items:center;justify-content:center;cursor:pointer;color:var(--text2);
-      font-size:1rem;transition:background .15s}
+    .icon-btn{background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:1rem;transition:background .15s}
     .icon-btn:hover{background:var(--surface3);color:var(--text)}
 
-    /* ── TABS ── */
-    .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--surface3);
-      overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+    /* TABS */
+    .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--surface3);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
     .tabs::-webkit-scrollbar{display:none}
-    .tab{flex-shrink:0;padding:.7rem 1.25rem;font-size:.85rem;color:var(--text3);
-      cursor:pointer;border-bottom:2px solid transparent;transition:color .15s;white-space:nowrap}
+    .tab{flex-shrink:0;padding:.7rem 1.25rem;font-size:.85rem;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:color .15s;white-space:nowrap}
     .tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
 
-    /* ── CONTENT ── */
-    .content{flex:1;padding:1rem 1rem 5rem;max-width:680px;margin:0 auto;width:100%;
-      overflow-y:auto}
+    /* CONTENT */
+    .content{flex:1;padding:1rem 1rem 5rem;max-width:680px;margin:0 auto;width:100%;overflow-y:auto}
     .section{display:none}.section.active{display:block}
 
-    /* ── CARDS ── */
-    .card{background:var(--surface);border:1px solid var(--surface3);
-      border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
+    /* CARDS */
+    .card{background:var(--surface);border:1px solid var(--surface3);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
     .card-row{display:flex;align-items:center;justify-content:space-between}
 
-    /* ── BUTTONS ── */
-    .btn{padding:.6rem 1rem;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;
-      font-size:.82rem;cursor:pointer;border:1px solid var(--surface3);
-      background:var(--surface2);color:var(--text2);transition:all .15s}
+    /* BUTTONS */
+    .btn{padding:.6rem 1rem;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:.82rem;cursor:pointer;border:1px solid var(--surface3);background:var(--surface2);color:var(--text2);transition:all .15s}
     .btn:hover{background:var(--surface3);color:var(--text)}
     .btn-accent{border-color:var(--accent);color:var(--accent)}
     .btn-accent:hover{background:var(--surface3)}
@@ -94,129 +69,80 @@
     .btn-danger:hover{background:var(--danger-bg)}
     .btn-full{width:100%;text-align:center;padding:.8rem}
 
-    /* ── SONG SELECT ── */
-    .song-select{width:100%;background:var(--surface2);border:1px solid var(--surface3);
-      border-radius:var(--radius-sm);padding:.6rem .85rem;color:var(--text);
-      font-family:'DM Sans',sans-serif;font-size:.9rem;outline:none;cursor:pointer}
+    /* SONG SELECT */
+    .song-select{width:100%;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.6rem .85rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.9rem;outline:none;cursor:pointer}
 
-    /* ── PROGRESS ── */
-    .progress-times{display:flex;justify-content:space-between;font-size:.78rem;
-      color:var(--text3);margin-bottom:.5rem}
-    .progress-track{width:100%;height:6px;background:var(--surface3);border-radius:3px;
-      cursor:pointer;position:relative}
-    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));
-      border-radius:3px;width:0%;pointer-events:none}
+    /* PROGRESS */
+    .progress-times{display:flex;justify-content:space-between;font-size:.78rem;color:var(--text3);margin-bottom:.5rem}
+    .progress-track{width:100%;height:6px;background:var(--surface3);border-radius:3px;cursor:pointer;position:relative}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;width:0%;pointer-events:none}
 
-    /* ── TRANSPORT ── */
+    /* TRANSPORT */
     .transport-main{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:1rem}
-    .play-btn{width:56px;height:56px;background:var(--accent);border:none;border-radius:50%;
-      display:flex;align-items:center;justify-content:center;cursor:pointer;
-      font-size:1.4rem;color:#1a1a00;transition:background .15s,transform .1s}
+    .play-btn{width:56px;height:56px;background:var(--accent);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.4rem;color:#1a1a00;transition:background .15s,transform .1s}
     .play-btn:active{transform:scale(.95)}.play-btn:hover{background:var(--accent2)}
-    .transport-btn{width:40px;height:40px;background:var(--surface2);border:1px solid var(--surface3);
-      border-radius:50%;display:flex;align-items:center;justify-content:center;
-      cursor:pointer;font-size:1rem;color:var(--text2);transition:background .15s}
+    .transport-btn{width:40px;height:40px;background:var(--surface2);border:1px solid var(--surface3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;color:var(--text2);transition:background .15s}
     .transport-btn:hover{background:var(--surface3);color:var(--text)}
     .transport-btn.active{background:var(--accent);color:#1a1a00;border-color:var(--accent)}
-    .tempo-row{display:flex;align-items:center;gap:10px;padding-top:.75rem;
-      border-top:1px solid var(--surface3)}
+    .tempo-row{display:flex;align-items:center;gap:10px;padding-top:.75rem;border-top:1px solid var(--surface3)}
     .tempo-label{font-size:.78rem;color:var(--text3);min-width:46px}
     .tempo-val{font-size:.82rem;color:var(--accent2);min-width:40px;text-align:right}
     input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
 
-    /* ── TRACKS ── */
-    .track-card{background:var(--surface);border:1px solid var(--surface3);
-      border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
+    /* TRACKS */
+    .track-card{background:var(--surface);border:1px solid var(--surface3);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
     .track-card.muted{opacity:.5}.track-card.soloed{border-color:var(--accent)}
     .track-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-    .track-name-input{background:transparent;border:none;border-bottom:1px solid transparent;
-      color:var(--text);font-family:'DM Sans',sans-serif;font-size:.95rem;font-weight:500;
-      width:140px;outline:none;padding:1px 2px;transition:border-color .15s}
+    .track-name-input{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.95rem;font-weight:500;width:130px;outline:none;padding:1px 2px;transition:border-color .15s}
     .track-name-input:focus{border-bottom-color:var(--accent)}
     .track-name-static{font-size:.95rem;font-weight:500;color:var(--text)}
     .track-btns{display:flex;gap:6px}
-    .track-btn{padding:4px 10px;border-radius:6px;font-size:.75rem;cursor:pointer;
-      border:1px solid var(--surface3);background:var(--surface2);color:var(--text2);
-      font-family:'DM Sans',sans-serif;transition:all .15s}
+    .track-btn{padding:4px 10px;border-radius:6px;font-size:.75rem;cursor:pointer;border:1px solid var(--surface3);background:var(--surface2);color:var(--text2);font-family:'DM Sans',sans-serif;transition:all .15s}
     .track-btn.mute-active{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)}
     .track-btn.solo-active{background:#3a3000;color:var(--accent2);border-color:var(--accent)}
-    .vol-row{display:flex;align-items:center;gap:10px}
+    .vol-row{display:flex;align-items:center;gap:10px;margin-top:.6rem}
     .vol-pct{font-size:.78rem;color:var(--text3);min-width:36px;text-align:right}
-    .file-row{margin-top:.6rem;display:flex;align-items:center;gap:8px}
-    .file-label-btn{font-size:.75rem;color:var(--accent);cursor:pointer;
-      text-decoration:underline;text-underline-offset:3px}
+    .file-row{margin-top:.5rem;display:flex;align-items:center;gap:8px}
+    .file-label-btn{font-size:.75rem;color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
     .file-status{font-size:.72rem;color:var(--text3)}
     input[type=file]{display:none}
-    .upload-progress{background:var(--surface2);border-radius:4px;height:4px;
-      margin-top:6px;overflow:hidden;display:none}
-    .upload-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));
-      width:0%;transition:width .2s}
+    .upload-progress{background:var(--surface2);border-radius:4px;height:4px;margin-top:6px;overflow:hidden;display:none}
+    .upload-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .2s}
 
-    /* ── NOTES ── */
-    .upload-notes-btn{display:block;width:100%;background:var(--surface2);
-      border:1px solid var(--accent);border-radius:var(--radius-sm);padding:.75rem;
-      color:var(--accent);font-family:'DM Sans',sans-serif;font-size:.9rem;
-      cursor:pointer;margin-bottom:1rem;text-align:center}
-    .notes-placeholder{background:var(--surface);border:1px dashed var(--surface3);
-      border-radius:var(--radius);padding:2rem;text-align:center;color:var(--text3)}
+    /* NOTES */
+    .upload-notes-btn{display:block;width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:.75rem;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:.9rem;cursor:pointer;margin-bottom:1rem;text-align:center}
+    .notes-placeholder{background:var(--surface);border:1px dashed var(--surface3);border-radius:var(--radius);padding:2rem;text-align:center;color:var(--text3)}
     .notes-placeholder p{font-size:.85rem;margin-top:.5rem}
 
-    /* ── ADMIN ── */
-    .section-title{font-size:.78rem;color:var(--text3);text-transform:uppercase;
-      letter-spacing:.08em;margin-bottom:.75rem;margin-top:1.25rem}
-    .section-title:first-child{margin-top:0}
-    .ensemble-card{background:var(--surface);border:1px solid var(--surface3);
-      border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
-    .ensemble-name{font-size:1rem;font-weight:500;color:var(--text);margin-bottom:2px}
-    .ensemble-meta{font-size:.75rem;color:var(--text3)}
-    .admin-card{background:var(--surface);border:1px solid var(--surface3);
-      border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:.75rem}
-
-    /* ── BOTTOM NAV ── */
-    .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);
-      border-top:1px solid var(--surface3);display:flex;z-index:100}
-    .nav-item{flex:1;padding:.75rem .5rem;display:flex;flex-direction:column;
-      align-items:center;gap:3px;cursor:pointer;color:var(--text3);font-size:.65rem}
+    /* BOTTOM NAV */
+    .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--surface3);display:flex;z-index:100}
+    .nav-item{flex:1;padding:.75rem .5rem;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--text3);font-size:.65rem}
     .nav-item svg{width:22px;height:22px}
     .nav-item.active{color:var(--accent2)}
 
-    /* ── MODAL ── */
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
-      display:flex;align-items:center;justify-content:center;padding:1rem}
+    /* MODAL */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem}
     .modal-overlay.hidden{display:none}
-    .modal{background:var(--surface);border:1px solid var(--surface3);
-      border-radius:var(--radius);padding:1.5rem;width:100%;max-width:400px;
-      max-height:90vh;overflow-y:auto}
+    .modal{background:var(--surface);border:1px solid var(--surface3);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:400px;max-height:90vh;overflow-y:auto}
     .modal h3{font-family:'Playfair Display',serif;color:var(--accent2);margin-bottom:1rem}
     .modal-btns{display:flex;gap:8px;margin-top:1rem}
-    .modal-btn{flex:1;padding:.7rem;border-radius:var(--radius-sm);
-      font-family:'DM Sans',sans-serif;font-size:.9rem;cursor:pointer;
-      border:1px solid var(--surface3);background:var(--surface2);color:var(--text2)}
+    .modal-btn{flex:1;padding:.7rem;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:.9rem;cursor:pointer;border:1px solid var(--surface3);background:var(--surface2);color:var(--text2)}
     .modal-btn.primary{background:var(--accent);color:#1a1a00;border-color:var(--accent);font-weight:500}
     .modal-btn.primary:hover{background:var(--accent2)}
     .modal-btn:hover{background:var(--surface3)}
 
-    /* ── TOAST ── */
-    .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
-      background:var(--surface3);color:var(--text);border-radius:var(--radius-sm);
-      padding:.6rem 1.2rem;font-size:.85rem;opacity:0;transition:opacity .3s,transform .3s;
-      pointer-events:none;z-index:300;white-space:nowrap}
+    /* TOAST */
+    .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface3);color:var(--text);border-radius:var(--radius-sm);padding:.6rem 1.2rem;font-size:.85rem;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;z-index:300;white-space:nowrap}
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-
-    /* ── LOADING ── */
-    .loading{display:flex;align-items:center;justify-content:center;padding:3rem;
-      color:var(--text3);font-size:.9rem}
-    .spinner{width:20px;height:20px;border:2px solid var(--surface3);
-      border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;
-      margin-right:10px}
+    .loading{display:flex;align-items:center;justify-content:center;padding:3rem;color:var(--text3);font-size:.9rem}
+    .spinner{width:20px;height:20px;border:2px solid var(--surface3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:10px}
     @keyframes spin{to{transform:rotate(360deg)}}
-
     .empty{text-align:center;padding:2rem;color:var(--text3);font-size:.85rem}
   </style>
 </head>
 <body>
 
-<!-- ── LOGIN SCREEN ── -->
+<!-- LOGIN -->
 <div class="screen active" id="screen-login">
   <div class="login-logo">♪ Chor-Mixer</div>
   <div class="login-sub">Stimmenmixer für Chorproben</div>
@@ -225,24 +151,21 @@
       <div class="login-tab active" id="lt-ensemble" onclick="setLoginTab('ensemble')">Ensemble</div>
       <div class="login-tab" id="lt-admin" onclick="setLoginTab('admin')">Admin</div>
     </div>
-    <label class="field-label" id="login-name-label" style="display:none">Name</label>
-    <input class="field-input" type="text" id="login-name" placeholder="Dein Name" style="display:none">
     <label class="field-label">Passwort</label>
-    <input class="field-input" type="password" id="login-pw" placeholder="Passwort eingeben">
+    <input class="field-input" type="password" id="login-pw" placeholder="Passwort eingeben" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn-primary" onclick="doLogin()">Anmelden</button>
     <div class="login-error" id="login-error">Falsches Passwort</div>
   </div>
 </div>
 
-<!-- ── ENSEMBLE APP ── -->
+<!-- ENSEMBLE APP -->
 <div class="screen" id="screen-ensemble">
   <div class="app-header">
     <div style="display:flex;align-items:center">
       <div class="header-title" id="ens-header-title">♪ Chor-Mixer</div>
-      <span class="header-badge" id="ens-header-badge"></span>
     </div>
     <div class="header-actions">
-      <div class="icon-btn" onclick="logoutEnsemble()" title="Abmelden">⏏</div>
+      <div class="icon-btn" onclick="logoutEnsemble()">⏏</div>
     </div>
   </div>
   <div class="tabs">
@@ -257,10 +180,7 @@
         </select>
       </div>
       <div class="card">
-        <div class="progress-times">
-          <span id="ens-time-cur">0:00</span>
-          <span id="ens-time-tot">0:00</span>
-        </div>
+        <div class="progress-times"><span id="ens-time-cur">0:00</span><span id="ens-time-tot">0:00</span></div>
         <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)">
           <div class="progress-fill" id="ens-progress-fill"></div>
         </div>
@@ -281,53 +201,49 @@
     </div>
     <div class="section" id="etab-notes">
       <div id="ens-notes-container">
-        <div class="notes-placeholder">
-          <div style="font-size:2rem">🎼</div>
-          <p>Kein Notenblatt für dieses Lied.</p>
-        </div>
+        <div class="notes-placeholder"><div style="font-size:2rem">🎼</div><p>Kein Notenblatt für dieses Lied.</p></div>
       </div>
     </div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item active" id="enav-mixer" onclick="switchEnsTab('mixer')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>
-      Mixer
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>Mixer
     </div>
     <div class="nav-item" id="enav-notes" onclick="switchEnsTab('notes')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>
-      Noten
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>Noten
     </div>
   </div>
 </div>
 
-<!-- ── ADMIN APP ── -->
+<!-- ADMIN APP -->
 <div class="screen" id="screen-admin">
   <div class="app-header">
     <div style="display:flex;align-items:center">
       <div class="header-title">♪ Chor-Mixer</div>
-      <span class="header-badge" id="admin-header-badge">Admin</span>
+      <span class="header-badge" id="admin-badge">Admin</span>
     </div>
     <div class="header-actions">
-      <div class="icon-btn" onclick="logoutAdmin()" title="Abmelden">⏏</div>
+      <div class="icon-btn" onclick="logoutAdmin()">⏏</div>
     </div>
   </div>
   <div class="tabs">
     <div class="tab active" id="atab-btn-ensembles" onclick="switchAdminTab('ensembles')">🎭 Ensembles</div>
     <div class="tab" id="atab-btn-songs" onclick="switchAdminTab('songs')">🎵 Lieder</div>
+    <div class="tab" id="atab-btn-mixer" onclick="switchAdminTab('mixer')">🎚 Mixer</div>
     <div class="tab" id="atab-btn-admins" onclick="switchAdminTab('admins')">👤 Admins</div>
   </div>
   <div class="content">
 
-    <!-- ENSEMBLES TAB -->
+    <!-- ENSEMBLES -->
     <div class="section active" id="atab-ensembles">
       <button class="btn btn-accent btn-full" onclick="showModal('modal-add-ensemble')" style="margin-bottom:1rem">+ Neues Ensemble</button>
       <div id="admin-ensembles-list"><div class="loading"><div class="spinner"></div>Laden…</div></div>
     </div>
 
-    <!-- SONGS TAB -->
+    <!-- SONGS -->
     <div class="section" id="atab-songs">
       <div class="card" style="margin-bottom:1rem">
-        <select class="song-select" id="admin-ensemble-filter" onchange="adminLoadSongs()">
+        <select class="song-select" id="admin-ens-filter" onchange="adminLoadSongs()">
           <option value="">— Ensemble auswählen —</option>
         </select>
       </div>
@@ -335,17 +251,14 @@
       <div id="admin-songs-list"><div class="empty">Bitte Ensemble auswählen</div></div>
     </div>
 
-    <!-- MIXER TAB (Admin bearbeitet ein Lied) -->
+    <!-- MIXER (Admin) -->
     <div class="section" id="atab-mixer">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
         <button class="btn" onclick="switchAdminTab('songs')">← Zurück</button>
-        <div style="font-size:.95rem;font-weight:500" id="admin-editing-song-name"></div>
+        <div style="font-size:.95rem;font-weight:500" id="adm-song-title"></div>
       </div>
       <div class="card">
-        <div class="progress-times">
-          <span id="adm-time-cur">0:00</span>
-          <span id="adm-time-tot">0:00</span>
-        </div>
+        <div class="progress-times"><span id="adm-time-cur">0:00</span><span id="adm-time-tot">0:00</span></div>
         <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)">
           <div class="progress-fill" id="adm-progress-fill"></div>
         </div>
@@ -363,19 +276,18 @@
         </div>
       </div>
       <div id="adm-tracks"></div>
-      <div style="margin-top:.5rem">
-        <button class="btn btn-accent btn-full" onclick="admAddVoice()">+ Stimme hinzufügen</button>
+      <div style="display:flex;gap:8px;margin-top:.5rem">
+        <button class="btn btn-accent" style="flex:1" onclick="admAddVoice()">+ Stimme hinzufügen</button>
       </div>
-      <!-- Notes upload for admin -->
       <div style="margin-top:1rem">
-        <p class="section-title">Notenblatt</p>
+        <p style="font-size:.78rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Notenblatt</p>
         <label class="upload-notes-btn" for="adm-notes-upload">📄 Notenblatt hochladen (PDF oder Bild)</label>
         <input type="file" id="adm-notes-upload" accept=".pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf" onchange="admUploadNotes(this)">
         <div id="adm-notes-preview"></div>
       </div>
     </div>
 
-    <!-- ADMINS TAB -->
+    <!-- ADMINS -->
     <div class="section" id="atab-admins">
       <div class="card" style="margin-bottom:1rem">
         <p style="font-size:.85rem;font-weight:500;margin-bottom:.75rem">Mein Passwort ändern</p>
@@ -389,7 +301,7 @@
   </div>
 </div>
 
-<!-- ── MODALS ── -->
+<!-- MODALS -->
 <div class="modal-overlay hidden" id="modal-add-ensemble">
   <div class="modal">
     <h3>Neues Ensemble</h3>
@@ -403,7 +315,6 @@
     </div>
   </div>
 </div>
-
 <div class="modal-overlay hidden" id="modal-edit-ensemble">
   <div class="modal">
     <h3>Ensemble bearbeiten</h3>
@@ -418,7 +329,6 @@
     </div>
   </div>
 </div>
-
 <div class="modal-overlay hidden" id="modal-add-song">
   <div class="modal">
     <h3>Neues Lied</h3>
@@ -430,7 +340,6 @@
     </div>
   </div>
 </div>
-
 <div class="modal-overlay hidden" id="modal-add-admin">
   <div class="modal">
     <h3>Neuen Admin hinzufügen</h3>
@@ -451,7 +360,7 @@
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
 const SUPA_URL = 'https://khbbmzxsrtekzggvpvuw.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtoYmJtenhzcnRla3pnZ3ZwdnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NzEzOTcsImV4cCI6MjA5NjI0NzM5N30.NdfO6uEB_dHvOjB3S89FAh_ojrTZJyjUqLMBpTdTLFQ';
-const BUCKET  = 'chor-files';
+const BUCKET = 'chor-files';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const pubUrl = p => `${SUPA_URL}/storage/v1/object/public/${BUCKET}/${p}`;
 
@@ -467,10 +376,15 @@ function toast(msg, ms=2800) {
 function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function hideModal(id) { document.getElementById(id).classList.add('hidden'); }
 document.querySelectorAll('.modal-overlay').forEach(o =>
-  o.addEventListener('click', e => { if (e.target===o) o.classList.add('hidden'); }));
+  o.addEventListener('click', e => { if(e.target===o) o.classList.add('hidden'); }));
+
+// ── COLORS ────────────────────────────────────────────────────────────────────
+const COLORS = ['#e86b8a','#7b9ee8','#6ecf8a','#d4845a','#b07be8','#e8c06a','#6ecfcf','#e87070',
+  '#a8d86e','#e8a07b','#7bd8e8','#c86ee8','#e8d46e','#6e8ae8','#e8b06e','#8ae86e',
+  '#e86eb0','#6ee8b0','#d4d46e','#9b6ee8'];
 
 // ── SESSION ───────────────────────────────────────────────────────────────────
-let session = { role: null, admin: null, ensemble: null };
+let session = { role:null, admin:null, ensemble:null };
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 let loginTab = 'ensemble';
@@ -478,9 +392,6 @@ function setLoginTab(tab) {
   loginTab = tab;
   document.getElementById('lt-ensemble').classList.toggle('active', tab==='ensemble');
   document.getElementById('lt-admin').classList.toggle('active', tab==='admin');
-  const isAdmin = tab === 'admin';
-  document.getElementById('login-name-label').style.display = isAdmin ? 'block' : 'none';
-  document.getElementById('login-name').style.display = isAdmin ? 'block' : 'none';
   document.getElementById('login-error').style.display = 'none';
 }
 
@@ -488,329 +399,262 @@ async function doLogin() {
   const pw = document.getElementById('login-pw').value.trim();
   if (!pw) return;
   document.getElementById('login-error').style.display = 'none';
-
   if (loginTab === 'admin') {
-    const name = document.getElementById('login-name').value.trim();
     const { data } = await sb.from('admins').select('*').eq('password', pw).maybeSingle();
-    if (!data) { document.getElementById('login-error').style.display = 'block'; return; }
-    session = { role: 'admin', admin: data, ensemble: null };
+    if (!data) { document.getElementById('login-error').style.display='block'; return; }
+    session = { role:'admin', admin:data, ensemble:null };
+    document.getElementById('admin-badge').textContent = data.name;
     showScreen('screen-admin');
-    document.getElementById('admin-header-badge').textContent = data.name;
     adminInit();
   } else {
     const { data } = await sb.from('ensembles').select('*').eq('password', pw).maybeSingle();
-    if (!data) { document.getElementById('login-error').style.display = 'block'; return; }
-    session = { role: 'ensemble', admin: null, ensemble: data };
-    showScreen('screen-ensemble');
+    if (!data) { document.getElementById('login-error').style.display='block'; return; }
+    session = { role:'ensemble', admin:null, ensemble:data };
     document.getElementById('ens-header-title').textContent = '♪ ' + data.name;
-    document.getElementById('ens-header-badge').textContent = '';
+    showScreen('screen-ensemble');
     ensInit();
   }
   document.getElementById('login-pw').value = '';
 }
-document.getElementById('login-pw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
+function logoutEnsemble() { ensEngine.stop(); showScreen('screen-login'); }
+function logoutAdmin()    { admEngine.stop(); showScreen('screen-login'); }
 
-function logoutEnsemble() {
-  ensStopAll(); ensPlayOff();
-  session = { role:null, admin:null, ensemble:null };
-  showScreen('screen-login');
-}
-function logoutAdmin() {
-  admStopAll(); admPlayOff();
-  session = { role:null, admin:null, ensemble:null };
-  showScreen('screen-login');
-}
+// ── SOUNDTOUCH ENGINE ─────────────────────────────────────────────────────────
+function makeSoundTouchEngine(prefix) {
+  let actx = null;
+  let buffers = [];      // AudioBuffer per voice
+  let gainNodes = [];    // GainNode per voice
+  let stNodes = [];      // ScriptProcessorNode per voice (SoundTouch)
+  let soundTouches = []; // SoundTouch instances
+  let filters = [];      // SimpleFilter instances
+  let playing = false;
+  let looping = false;
+  let tempoRate = 1.0;
+  let duration = 0;
+  let startTime = 0;     // actx.currentTime when play started
+  let startOffset = 0;   // position in seconds when play started
+  let positions = [];    // current read position per voice (in samples)
+  let ticker = null;
 
-// ── COLORS ────────────────────────────────────────────────────────────────────
-const COLORS = ['#e86b8a','#7b9ee8','#6ecf8a','#d4845a','#b07be8','#e8c06a','#6ecfcf','#e87070',
-  '#a8d86e','#e8a07b','#7bd8e8','#c86ee8','#e8d46e','#6e8ae8','#e8b06e','#8ae86e',
-  '#e86eb0','#6ee8b0','#d4d46e','#9b6ee8'];
+  function fmt(s) {
+    const m=Math.floor(Math.max(0,s)/60), sc=Math.floor(Math.max(0,s)%60);
+    return m+':'+(sc<10?'0':'')+sc;
+  }
+  function el(id) { return document.getElementById(prefix+id); }
 
-// ── AUDIO ENGINE FACTORY ──────────────────────────────────────────────────────
-function makeAudioEngine(prefix) {
-  let actx=null, gainNodes=[], bufs=[], srcNodes=[];
-  let playing=false, looping=false, tempoRate=1.0;
-  let duration=0, pauseOffset=0, playStartAt=0, ticker=null;
-
-  function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
-  function el(id){return document.getElementById(prefix+id);}
-
-  function ensureCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();}
-
-  function reset(n){
-    stopAll(); playOff();
-    gainNodes=[]; bufs=new Array(n).fill(null); srcNodes=[];
-    if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();
-    for(let i=0;i<n;i++){
-      const g=actx.createGain(); g.gain.value=0.8; g.connect(actx.destination); gainNodes[i]=g;
-    }
+  function ensureCtx() {
+    if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
   }
 
-  function setGain(i,song){
-    if(!gainNodes[i])return;
-    gainNodes[i].gain.value=song.voices[i].muted?0:song.voices[i].volume/100;
+  function stopNodes() {
+    stNodes.forEach(n => { try { n.disconnect(); } catch(e){} });
+    stNodes = []; soundTouches = []; filters = []; positions = [];
+    clearInterval(ticker);
   }
 
-  function stopSrcs(){
-    srcNodes.forEach(s=>{try{s?.stop();}catch(e){}});
-    srcNodes=[]; clearInterval(ticker);
-  }
-  function playOff(){
-    playing=false; clearInterval(ticker);
-    const pb=el('-play-btn'); if(pb)pb.textContent='▶';
-  }
-  function stopAll(){
-    pauseOffset=0; stopSrcs();
-    const pf=el('-progress-fill'); if(pf)pf.style.width='0%';
-    const tc=el('-time-cur'); if(tc)tc.textContent='0:00';
+  function stop() {
+    stopNodes();
+    playing = false;
+    startOffset = 0;
+    const pf=el('-progress-fill'); if(pf) pf.style.width='0%';
+    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
+    const pb=el('-play-btn'); if(pb) pb.textContent='▶';
   }
 
-  function getActiveBufs(){ return stretchedBufs.length ? stretchedBufs : bufs; }
+  function pause() {
+    if (!playing) return;
+    startOffset = Math.min(actx.currentTime - startTime, duration / tempoRate);
+    stopNodes();
+    playing = false;
+    const pb=el('-play-btn'); if(pb) pb.textContent='▶';
+  }
 
-  function playAll(){
+  function play() {
     ensureCtx();
-    if(actx.state==='suspended')actx.resume();
-    const active=getActiveBufs();
-    if(!active.some(b=>b)){toast('Keine Audiodateien geladen');return;}
-    stopSrcs();
-    const now=actx.currentTime;
-    playStartAt=now-pauseOffset;
-    active.forEach((buf,i)=>{
-      if(!buf)return;
-      const src=actx.createBufferSource();
-      src.buffer=buf;
-      src.connect(gainNodes[i]||actx.destination);
-      src.start(now,pauseOffset); srcNodes[i]=src;
+    if (actx.state === 'suspended') actx.resume();
+    if (!buffers.some(b=>b)) { toast('Keine Audiodateien geladen'); return; }
+    stopNodes();
+
+    const sampleRate = actx.sampleRate;
+    startTime = actx.currentTime;
+
+    buffers.forEach((buf, i) => {
+      if (!buf) return;
+
+      const st = new SoundTouch.SoundTouch(sampleRate);
+      st.tempo = tempoRate;
+      soundTouches[i] = st;
+
+      let readPos = Math.floor(startOffset * tempoRate * sampleRate);
+      positions[i] = readPos;
+
+      const ch0 = buf.getChannelData(0);
+      const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
+
+      const source = {
+        extract: function(target, numFrames, position) {
+          const pos = readPos + position;
+          let count = 0;
+          for (let k = 0; k < numFrames; k++) {
+            const idx = pos + k;
+            if (idx >= buf.length) break;
+            target[k*2]   = ch0[idx];
+            target[k*2+1] = ch1[idx];
+            count++;
+          }
+          return count;
+        }
+      };
+
+      const filter = new SoundTouch.SimpleFilter(source, st);
+      filters[i] = filter;
+
+      const bufSize = 4096;
+      const node = SoundTouch.getWebAudioNode(actx, filter, bufSize);
+      node.connect(gainNodes[i] || actx.destination);
+      stNodes[i] = node;
     });
-    playing=true;
-    const pb=el('-play-btn'); if(pb)pb.textContent='⏸';
-    ticker=setInterval(tick,100);
+
+    playing = true;
+    const pb=el('-play-btn'); if(pb) pb.textContent='⏸';
+    ticker = setInterval(tick, 100);
   }
 
-  function pauseAll(){
-    const totalDur=stretchedBufs.length?duration/currentRate:duration;
-    pauseOffset=Math.min(actx.currentTime-playStartAt,totalDur);
-    stopSrcs(); playOff();
-  }
-
-  function tick(){
-    if(!playing||!duration)return;
-    const totalDur=stretchedBufs.length?duration/currentRate:duration;
-    const elapsed=actx.currentTime-playStartAt;
-    if(elapsed>=totalDur){
-      if(looping){stopAll();playAll();}else{stopAll();playOff();}return;
+  function tick() {
+    if (!playing || !duration) return;
+    const elapsed = actx.currentTime - startTime + startOffset;
+    const total = duration / tempoRate;
+    if (elapsed >= total) {
+      if (looping) { startOffset=0; startTime=actx.currentTime; stopNodes();
+        // restart
+        play(); return;
+      } else { stop(); return; }
     }
-    const pf=el('-progress-fill'); if(pf)pf.style.width=(elapsed/totalDur*100)+'%';
-    const tc=el('-time-cur'); if(tc)tc.textContent=fmt(elapsed);
+    const pf=el('-progress-fill'); if(pf) pf.style.width=(elapsed/total*100)+'%';
+    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(elapsed);
   }
 
-  function seekTo(e){
+  function seek(e) {
+    const track=el('-progress-track'); if(!track) return;
     ensureCtx();
-    const track=el('-progress-track'); if(!track)return;
-    const rect=track.getBoundingClientRect();
-    const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    const totalDur=stretchedBufs.length?duration/currentRate:duration;
-    pauseOffset=pct*totalDur;
-    const pf=el('-progress-fill'); if(pf)pf.style.width=(pct*100)+'%';
-    const tc=el('-time-cur'); if(tc)tc.textContent=fmt(pauseOffset);
-    if(playing){
-      stopSrcs(); clearInterval(ticker);
-      const now=actx.currentTime;
-      playStartAt=now-pauseOffset;
-      const active=getActiveBufs();
-      active.forEach((buf,i)=>{
-        if(!buf)return;
-        const src=actx.createBufferSource();
-        src.buffer=buf;
-        src.connect(gainNodes[i]||actx.destination);
-        src.start(now,pauseOffset); srcNodes[i]=src;
-      });
-      ticker=setInterval(tick,100);
+    const rect = track.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX-rect.left)/rect.width));
+    const total = duration / tempoRate;
+    startOffset = pct * total;
+    const pf=el('-progress-fill'); if(pf) pf.style.width=(pct*100)+'%';
+    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(startOffset);
+    if (playing) { stopNodes(); startTime=actx.currentTime; play(); }
+  }
+
+  function setTempo(val) {
+    tempoRate = val / 100;
+    const tv=el('-tempo-val'); if(tv) tv.textContent=val+'%';
+    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+    // Update live SoundTouch instances
+    soundTouches.forEach(st => { if(st) st.tempo=tempoRate; });
+    // If not playing yet, update offset display
+    if (playing) {
+      const elapsed = actx.currentTime - startTime + startOffset;
+      startOffset = elapsed;
+      startTime = actx.currentTime;
     }
   }
 
-  async function setTempo(val){
-    const wasPlaying=playing;
-    const totalDur=stretchedBufs.length?duration/currentRate:duration;
-    const pos=playing?(actx.currentTime-playStartAt):pauseOffset;
-    if(wasPlaying){stopSrcs();clearInterval(ticker);playing=false;}
-    currentRate=val/100;
-    const tv=el('-tempo-val'); if(tv)tv.textContent=val+'%';
-    const tt=el('-time-tot'); if(tt)tt.textContent='…';
-    // Apply phase vocoder stretch asynchronously
-    await applyStretch(currentRate);
-    const newDur=duration/currentRate;
-    if(tt)tt.textContent=fmt(newDur);
-    pauseOffset=Math.min(pos,newDur);
-    if(wasPlaying){
-      const now=actx.currentTime;
-      playStartAt=now-pauseOffset;
-      stretchedBufs.forEach((buf,i)=>{
-        if(!buf)return;
-        const src=actx.createBufferSource();
-        src.buffer=buf;
-        src.connect(gainNodes[i]||actx.destination);
-        src.start(now,pauseOffset); srcNodes[i]=src;
-      });
-      playing=true;
-      const pb=el('-play-btn'); if(pb)pb.textContent='⏸';
-      ticker=setInterval(tick,100);
-    }
+  function toggleLoop() {
+    looping = !looping;
+    const lb=el('-loop-btn'); if(lb) lb.classList.toggle('active', looping);
+    toast(looping ? '🔁 Loop aktiv' : 'Loop deaktiviert');
   }
 
-  function toggleLoop(){
-    looping=!looping;
-    const lb=el('-loop-btn'); if(lb)lb.classList.toggle('active',looping);
-    toast(looping?'🔁 Loop aktiv':'Loop deaktiviert');
-  }
-
-  async function loadBuf(i,path){
+  function reset(n) {
+    stop();
+    gainNodes.forEach(g => { try{g.disconnect();}catch(e){} });
+    gainNodes = []; buffers = new Array(n).fill(null);
     ensureCtx();
-    try{
-      const res=await fetch(pubUrl(path));
-      if(!res.ok)throw new Error();
-      const buf=await actx.decodeAudioData(await res.arrayBuffer());
-      bufs[i]=buf;
-      duration=bufs.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
-      const tt=el('-time-tot'); if(tt)tt.textContent=fmt(duration/tempoRate);
+    for (let i=0; i<n; i++) {
+      const g = actx.createGain();
+      g.gain.value = 0.8;
+      g.connect(actx.destination);
+      gainNodes[i] = g;
+    }
+  }
+
+  async function loadFromUrl(i, path) {
+    ensureCtx();
+    try {
+      const res = await fetch(pubUrl(path));
+      if (!res.ok) throw new Error();
+      const ab = await res.arrayBuffer();
+      const buf = await actx.decodeAudioData(ab);
+      buffers[i] = buf;
+      duration = buffers.reduce((m,b)=>b?Math.max(m,b.duration):m, 0);
+      const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
       return true;
-    }catch(e){return false;}
+    } catch(e) { return false; }
   }
 
-  async function decodeBuf(i,ab){
+  async function loadFromArrayBuffer(i, ab) {
     ensureCtx();
-    try{
-      const buf=await actx.decodeAudioData(ab);
-      bufs[i]=buf;
-      duration=bufs.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
-      const tt=el('-time-tot'); if(tt)tt.textContent=fmt(duration/tempoRate);
+    try {
+      const buf = await actx.decodeAudioData(ab);
+      buffers[i] = buf;
+      duration = buffers.reduce((m,b)=>b?Math.max(m,b.duration):m, 0);
+      const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
       return true;
-    }catch(e){return false;}
-  }
-
-  // Phase Vocoder: time-stretch without pitch change
-  // Based on overlap-add method with FFT phase correction
-  function phaseVocoderStretch(buffer, rate) {
-    if (Math.abs(rate - 1.0) < 0.02) return buffer; // no change needed
-    const sampleRate = buffer.sampleRate;
-    const channels = buffer.numberOfChannels;
-    const frameSize = 2048;
-    const hopIn  = Math.floor(frameSize / 4);
-    const hopOut = Math.floor(hopIn * rate);
-    const outputLen = Math.floor(buffer.length / rate);
-    const out = actx.createBuffer(channels, outputLen, sampleRate);
-
-    for (let ch = 0; ch < channels; ch++) {
-      const input  = buffer.getChannelData(ch);
-      const output = out.getChannelData(ch);
-      const phaseAcc = new Float32Array(frameSize);
-      const prevPhase = new Float32Array(frameSize);
-      let inPos = 0, outPos = 0;
-
-      while (outPos + frameSize < outputLen) {
-        // Analysis frame
-        const frame = new Float32Array(frameSize);
-        for (let k = 0; k < frameSize; k++) {
-          const idx = inPos + k;
-          const win = 0.5 * (1 - Math.cos(2 * Math.PI * k / frameSize)); // Hann window
-          frame[k] = idx < input.length ? input[idx] * win : 0;
-        }
-
-        // Simple overlap-add (without full FFT phase correction for browser compatibility)
-        for (let k = 0; k < frameSize && outPos + k < outputLen; k++) {
-          const win = 0.5 * (1 - Math.cos(2 * Math.PI * k / frameSize));
-          output[outPos + k] += frame[k] * win;
-        }
-
-        inPos  += hopIn;
-        outPos += hopOut;
-      }
-
-      // Normalize
-      const normFactor = frameSize / (hopOut * 2);
-      for (let i = 0; i < outputLen; i++) output[i] *= normFactor;
-    }
-    return out;
-  }
-
-  // Store stretched buffers per voice
-  let stretchedBufs = [];
-  let currentRate = 1.0;
-
-  function getPlayBuf(i) {
-    return stretchedBufs[i] || bufs[i];
-  }
-
-  async function applyStretch(rate) {
-    currentRate = rate;
-    stretchedBufs = bufs.map(b => b ? phaseVocoderStretch(b, rate) : null);
+    } catch(e) { return false; }
   }
 
   return {
-    reset,setGain,stopAll,playOff,
-    togglePlay:()=>{if(playing)pauseAll();else playAll();},
-    skipBack:()=>{stopAll();playOff();},
-    toggleLoop,seekTo,setTempo,loadBuf,decodeBuf,
-    get playing(){return playing;},
-    get gainNodes(){return gainNodes;},
+    stop, pause, play,
+    togglePlay: () => { if(playing) pause(); else play(); },
+    skipBack: () => stop(),
+    seek, setTempo, toggleLoop, reset, loadFromUrl, loadFromArrayBuffer,
+    get playing() { return playing; },
+    get gainNodes() { return gainNodes; },
   };
 }
 
-// ── ENSEMBLE ENGINE ───────────────────────────────────────────────────────────
-const ensAudio = makeAudioEngine('ens');
-let ensSong = null; // {id, name, voices[], notes_path, notes_is_img}
+const ensEngine = makeSoundTouchEngine('ens');
+const admEngine = makeSoundTouchEngine('adm');
+
+// ── ENSEMBLE VIEW ─────────────────────────────────────────────────────────────
+let ensSong = null;
 
 async function ensInit() {
-  const { data:songs } = await sb.from('songs')
-    .select('id,name')
-    .eq('ensemble_id', session.ensemble.id)
-    .order('created_at');
+  const { data } = await sb.from('songs').select('id,name').eq('ensemble_id', session.ensemble.id).order('created_at');
   const sel = document.getElementById('ens-song-select');
   sel.innerHTML = '<option value="">— Lied auswählen —</option>' +
-    (songs||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    (data||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
 async function loadEnsSong(id) {
   if (!id) return;
-  ensAudio.stopAll(); ensAudio.playOff();
+  ensEngine.stop();
   document.getElementById('ens-tracks').innerHTML = '<div class="loading"><div class="spinner"></div>Laden…</div>';
-
   const { data:song } = await sb.from('songs').select('*').eq('id',id).single();
   const { data:voices } = await sb.from('voices').select('*').eq('song_id',id).order('position');
-  song.voices = (voices||[]).map(v=>({...v, muted:false, soloed:false}));
+  song.voices = (voices||[]).map(v=>({...v,muted:false,soloed:false}));
   ensSong = song;
-
-  ensAudio.reset(song.voices.length);
-  // Set initial gains
-  song.voices.forEach((v,i) => {
-    ensAudio.gainNodes[i].gain.value = v.volume/100;
-  });
-
+  ensEngine.reset(song.voices.length);
+  song.voices.forEach((v,i) => { ensEngine.gainNodes[i].gain.value = v.volume/100; });
   renderEnsTracks();
-  // Load audio
   song.voices.forEach((v,i) => {
-    if (v.storage_path) {
-      const fsEl = document.getElementById('ens-fs-'+i);
-      if (fsEl) fsEl.textContent = '⬇';
-      ensAudio.loadBuf(i, v.storage_path).then(ok => {
-        if (fsEl) fsEl.textContent = ok ? '✓' : '⚠';
-      });
-    }
+    if (!v.storage_path) return;
+    const fs = document.getElementById('ens-fs-'+i);
+    if (fs) fs.textContent='⬇';
+    ensEngine.loadFromUrl(i, v.storage_path).then(ok => { if(fs) fs.textContent=ok?'✓':'⚠'; });
   });
-
-  // Load notes
-  switchEnsTab('mixer');
+  // Notes
   if (song.notes_path) {
     const url = pubUrl(song.notes_path);
-    const isImg = song.notes_is_img;
-    document.getElementById('ens-notes-container').innerHTML = isImg
+    document.getElementById('ens-notes-container').innerHTML = song.notes_is_img
       ? `<img src="${url}" alt="Notenblatt" style="width:100%;border-radius:var(--radius);border:1px solid var(--surface3)">`
-      : `<iframe src="${url}" style="width:100%;height:78vh;border-radius:var(--radius);border:1px solid var(--surface3)" title="Notenblatt"></iframe>
+      : `<iframe src="${url}" style="width:100%;height:78vh;border-radius:var(--radius);border:1px solid var(--surface3)"></iframe>
          <p style="font-size:.75rem;color:var(--text3);margin-top:.5rem;text-align:center"><a href="${url}" target="_blank" style="color:var(--accent)">Direkt öffnen ↗</a></p>`;
   } else {
     document.getElementById('ens-notes-container').innerHTML = '<div class="notes-placeholder"><div style="font-size:2rem">🎼</div><p>Kein Notenblatt für dieses Lied.</p></div>';
@@ -819,14 +663,13 @@ async function loadEnsSong(id) {
 
 function renderEnsTracks() {
   if (!ensSong) return;
-  const el = document.getElementById('ens-tracks');
-  el.innerHTML = ensSong.voices.map((v,i) => `
+  document.getElementById('ens-tracks').innerHTML = ensSong.voices.map((v,i) => `
     <div class="track-card${v.muted?' muted':''}${v.soloed?' soloed':''}" id="ens-tc-${i}">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
         <div style="display:flex;align-items:center;gap:10px">
           <div class="track-dot" style="background:${COLORS[i%COLORS.length]}"></div>
           <span class="track-name-static">${v.name}</span>
-          <span class="file-status" id="ens-fs-${i}">${v.storage_path?'':'—'}</span>
+          <span class="file-status" id="ens-fs-${i}">${v.storage_path?'✓':'—'}</span>
         </div>
         <div class="track-btns">
           <button class="track-btn${v.muted?' mute-active':''}" id="ens-mb-${i}" onclick="ensToggleMute(${i})">Stumm</button>
@@ -842,69 +685,62 @@ function renderEnsTracks() {
 }
 
 function ensSetVol(i,val) {
-  if (!ensSong) return;
-  ensSong.voices[i].volume = +val;
-  document.getElementById('ens-vp-'+i).textContent = val+'%';
-  if (ensAudio.gainNodes[i] && !ensSong.voices[i].muted)
-    ensAudio.gainNodes[i].gain.value = val/100;
+  if(!ensSong) return;
+  ensSong.voices[i].volume=+val;
+  document.getElementById('ens-vp-'+i).textContent=val+'%';
+  if(ensEngine.gainNodes[i]&&!ensSong.voices[i].muted) ensEngine.gainNodes[i].gain.value=val/100;
 }
 function ensToggleMute(i) {
-  if (!ensSong) return;
-  ensSong.voices[i].muted = !ensSong.voices[i].muted;
-  document.getElementById('ens-tc-'+i).classList.toggle('muted', ensSong.voices[i].muted);
-  document.getElementById('ens-mb-'+i).classList.toggle('mute-active', ensSong.voices[i].muted);
-  ensAudio.gainNodes[i].gain.value = ensSong.voices[i].muted ? 0 : ensSong.voices[i].volume/100;
+  if(!ensSong) return;
+  ensSong.voices[i].muted=!ensSong.voices[i].muted;
+  document.getElementById('ens-tc-'+i).classList.toggle('muted',ensSong.voices[i].muted);
+  document.getElementById('ens-mb-'+i).classList.toggle('mute-active',ensSong.voices[i].muted);
+  ensEngine.gainNodes[i].gain.value=ensSong.voices[i].muted?0:ensSong.voices[i].volume/100;
 }
 function ensToggleSolo(i) {
-  if (!ensSong) return;
-  const was = ensSong.voices[i].soloed;
-  ensSong.voices.forEach((v,j) => {
+  if(!ensSong) return;
+  const was=ensSong.voices[i].soloed;
+  ensSong.voices.forEach((v,j)=>{
     v.soloed=false;
     document.getElementById('ens-tc-'+j)?.classList.remove('soloed');
     document.getElementById('ens-sb-'+j)?.classList.remove('solo-active');
   });
-  if (!was) {
+  if(!was){
     ensSong.voices[i].soloed=true;
     document.getElementById('ens-tc-'+i)?.classList.add('soloed');
     document.getElementById('ens-sb-'+i)?.classList.add('solo-active');
   }
-  const anySolo = ensSong.voices.some(v=>v.soloed);
-  ensSong.voices.forEach((v,j) => {
-    if (ensAudio.gainNodes[j])
-      ensAudio.gainNodes[j].gain.value = anySolo?(v.soloed?v.volume/100:0):(v.muted?0:v.volume/100);
+  const anySolo=ensSong.voices.some(v=>v.soloed);
+  ensSong.voices.forEach((v,j)=>{
+    if(ensEngine.gainNodes[j]) ensEngine.gainNodes[j].gain.value=anySolo?(v.soloed?v.volume/100:0):(v.muted?0:v.volume/100);
   });
 }
-
-function ensTogglePlay() { ensAudio.togglePlay(); }
-function ensSkipBack()   { ensAudio.skipBack(); }
-function ensToggleLoop() { ensAudio.toggleLoop(); }
-function ensSeekTo(e)    { ensAudio.seekTo(e); }
-function ensSetTempo(v)  { ensAudio.setTempo(v); }
-function ensStopAll()    { ensAudio.stopAll(); }
-function ensPlayOff()    { ensAudio.playOff(); }
+function ensTogglePlay(){ensEngine.togglePlay();}
+function ensSkipBack(){ensEngine.skipBack();}
+function ensToggleLoop(){ensEngine.toggleLoop();}
+function ensSeekTo(e){ensEngine.seek(e);}
+function ensSetTempo(v){ensEngine.setTempo(v);}
 
 function switchEnsTab(tab) {
-  ['mixer','notes'].forEach(t => {
-    document.getElementById('etab-'+t).classList.toggle('active', t===tab);
-    document.getElementById('etab-btn-'+t).classList.toggle('active', t===tab);
-    document.getElementById('enav-'+t).classList.toggle('active', t===tab);
+  ['mixer','notes'].forEach(t=>{
+    document.getElementById('etab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('etab-btn-'+t).classList.toggle('active',t===tab);
+    document.getElementById('enav-'+t).classList.toggle('active',t===tab);
   });
 }
 
-// ── ADMIN ENGINE ──────────────────────────────────────────────────────────────
-const admAudio = makeAudioEngine('adm');
-let admSong = null;
+// ── ADMIN VIEW ────────────────────────────────────────────────────────────────
+let adminEnsembles=[], adminSongs=[], admSong=null;
 
 async function adminInit() {
   await Promise.all([adminLoadEnsembles(), adminLoadAdmins()]);
-  adminFillEnsembleFilter();
+  adminFillFilter();
 }
 
 // Ensembles
-let adminEnsembles = [];
 async function adminLoadEnsembles() {
   const { data, error } = await sb.from('ensembles').select('*').order('created_at');
-  if (error) { console.error('Load ensembles error:', error); toast('Fehler beim Laden: ' + error.message, 5000); return; }
+  if (error) { toast('Fehler: '+error.message, 5000); return; }
   adminEnsembles = data||[];
   renderAdminEnsembles();
 }
@@ -912,181 +748,152 @@ async function adminLoadEnsembles() {
 function renderAdminEnsembles() {
   const el = document.getElementById('admin-ensembles-list');
   if (!adminEnsembles.length) { el.innerHTML='<div class="empty">Noch keine Ensembles.</div>'; return; }
-  el.innerHTML = adminEnsembles.map(e => `
-    <div class="ensemble-card">
-      <div class="card-row">
-        <div>
-          <div class="ensemble-name">${e.name}</div>
-          <div class="ensemble-meta">Passwort: <code>${e.password}</code></div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
-          <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
-        </div>
+  el.innerHTML = adminEnsembles.map(e=>`
+    <div class="card card-row" style="margin-bottom:.75rem">
+      <div>
+        <div style="font-size:.95rem;font-weight:500">${e.name}</div>
+        <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${e.password}</code></div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
+        <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
       </div>
     </div>`).join('');
 }
 
 async function addEnsemble() {
-  const name = document.getElementById('new-ens-name').value.trim();
-  const pw   = document.getElementById('new-ens-pw').value.trim();
-  if (!name||!pw) return;
-  const { data, error } = await sb.from('ensembles').insert({ name, password:pw, admin_id:session.admin.id }).select();
-  if (error) { toast('Fehler: ' + error.message, 5000); console.error(error); return; }
+  const name=document.getElementById('new-ens-name').value.trim();
+  const pw=document.getElementById('new-ens-pw').value.trim();
+  if(!name||!pw) return;
+  const {data,error}=await sb.from('ensembles').insert({name,password:pw,admin_id:session.admin.id}).select().single();
+  if(error){toast('Fehler: '+error.message,5000);return;}
   hideModal('modal-add-ensemble');
   document.getElementById('new-ens-name').value='';
   document.getElementById('new-ens-pw').value='';
   await adminLoadEnsembles();
-  adminFillEnsembleFilter();
+  adminFillFilter();
   toast('✓ Ensemble erstellt');
 }
 
 function editEnsemble(id) {
-  const e = adminEnsembles.find(x=>x.id===id);
-  document.getElementById('edit-ens-id').value = e.id;
-  document.getElementById('edit-ens-name').value = e.name;
-  document.getElementById('edit-ens-pw').value = e.password;
+  const e=adminEnsembles.find(x=>x.id===id);
+  document.getElementById('edit-ens-id').value=e.id;
+  document.getElementById('edit-ens-name').value=e.name;
+  document.getElementById('edit-ens-pw').value=e.password;
   showModal('modal-edit-ensemble');
 }
-
 async function saveEnsemble() {
-  const id   = document.getElementById('edit-ens-id').value;
-  const name = document.getElementById('edit-ens-name').value.trim();
-  const pw   = document.getElementById('edit-ens-pw').value.trim();
-  if (!name||!pw) return;
+  const id=document.getElementById('edit-ens-id').value;
+  const name=document.getElementById('edit-ens-name').value.trim();
+  const pw=document.getElementById('edit-ens-pw').value.trim();
+  if(!name||!pw) return;
   await sb.from('ensembles').update({name,password:pw}).eq('id',id);
   hideModal('modal-edit-ensemble');
-  await adminLoadEnsembles();
-  adminFillEnsembleFilter();
-  toast('✓ Ensemble gespeichert');
+  await adminLoadEnsembles(); adminFillFilter(); toast('✓ Gespeichert');
 }
-
 async function deleteEnsemble(id) {
-  if (!confirm('Ensemble und alle Lieder löschen?')) return;
+  if(!confirm('Ensemble und alle Lieder löschen?')) return;
   await sb.from('ensembles').delete().eq('id',id);
-  await adminLoadEnsembles();
-  adminFillEnsembleFilter();
-  toast('Ensemble gelöscht');
+  await adminLoadEnsembles(); adminFillFilter(); toast('Gelöscht');
 }
 
-function adminFillEnsembleFilter() {
-  const sel = document.getElementById('admin-ensemble-filter');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— Ensemble auswählen —</option>' +
+function adminFillFilter() {
+  const sel=document.getElementById('admin-ens-filter');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— Ensemble auswählen —</option>'+
     adminEnsembles.map(e=>`<option value="${e.id}"${e.id===cur?' selected':''}>${e.name}</option>`).join('');
 }
 
 // Songs
-let adminSongs = [];
 async function adminLoadSongs() {
-  const ensId = document.getElementById('admin-ensemble-filter').value;
-  const addBtn = document.getElementById('admin-add-song-btn');
-  if (!ensId) {
-    document.getElementById('admin-songs-list').innerHTML='<div class="empty">Bitte Ensemble auswählen</div>';
-    addBtn.style.display='none'; return;
-  }
-  addBtn.style.display='block';
+  const ensId=document.getElementById('admin-ens-filter').value;
+  const btn=document.getElementById('admin-add-song-btn');
+  if(!ensId){document.getElementById('admin-songs-list').innerHTML='<div class="empty">Bitte Ensemble auswählen</div>';btn.style.display='none';return;}
+  btn.style.display='block';
   document.getElementById('admin-songs-list').innerHTML='<div class="loading"><div class="spinner"></div>Laden…</div>';
-  const { data } = await sb.from('songs').select('*').eq('ensemble_id',ensId).order('created_at');
-  adminSongs = data||[];
+  const {data}=await sb.from('songs').select('*').eq('ensemble_id',ensId).order('created_at');
+  adminSongs=data||[];
   renderAdminSongs();
 }
 
 function renderAdminSongs() {
-  const el = document.getElementById('admin-songs-list');
-  if (!adminSongs.length) { el.innerHTML='<div class="empty">Noch keine Lieder.</div>'; return; }
-  el.innerHTML = adminSongs.map(s=>`
-    <div class="card card-row">
-      <div>
-        <div style="font-size:.95rem;font-weight:500">${s.name}</div>
-      </div>
+  const el=document.getElementById('admin-songs-list');
+  if(!adminSongs.length){el.innerHTML='<div class="empty">Noch keine Lieder.</div>';return;}
+  el.innerHTML=adminSongs.map(s=>`
+    <div class="card card-row" style="margin-bottom:.75rem">
+      <div style="font-size:.95rem;font-weight:500">${s.name}</div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-accent" onclick="openAdminMixer('${s.id}')">Bearbeiten</button>
+        <button class="btn btn-accent" onclick="openAdmMixer('${s.id}')">Bearbeiten</button>
         <button class="btn btn-danger" onclick="deleteSong('${s.id}')">✕</button>
       </div>
     </div>`).join('');
 }
 
 async function addSong() {
-  const name   = document.getElementById('new-song-name').value.trim();
-  const ensId  = document.getElementById('admin-ensemble-filter').value;
-  if (!name||!ensId) return;
-  const { data:song } = await sb.from('songs').insert({name, ensemble_id:ensId}).select().single();
-  // Create 20 default voices named Stimme 1–20
-  const voices = Array.from({length:20},(_,i)=>({
-    song_id:song.id, position:i,
-    name:'Stimme '+(i+1),
-    volume:80, muted:false
-  }));
+  const name=document.getElementById('new-song-name').value.trim();
+  const ensId=document.getElementById('admin-ens-filter').value;
+  if(!name||!ensId) return;
+  const {data:song}=await sb.from('songs').insert({name,ensemble_id:ensId}).select().single();
+  const voices=Array.from({length:20},(_,i)=>({song_id:song.id,position:i,name:'Stimme '+(i+1),volume:80,muted:false}));
   await sb.from('voices').insert(voices);
   hideModal('modal-add-song');
   document.getElementById('new-song-name').value='';
-  await adminLoadSongs();
-  toast('✓ Lied erstellt');
+  await adminLoadSongs(); toast('✓ Lied erstellt');
 }
 
 async function deleteSong(id) {
-  if (!confirm('Lied löschen?')) return;
+  if(!confirm('Lied löschen?')) return;
   await sb.from('songs').delete().eq('id',id);
-  await adminLoadSongs();
-  toast('Lied gelöscht');
+  await adminLoadSongs(); toast('Gelöscht');
 }
 
 // Admin Mixer
-async function openAdminMixer(songId) {
-  admAudio.stopAll(); admAudio.playOff();
+async function openAdmMixer(songId) {
+  admEngine.stop();
   document.getElementById('adm-tracks').innerHTML='<div class="loading"><div class="spinner"></div>Laden…</div>';
   switchAdminTab('mixer');
-
-  const { data:song } = await sb.from('songs').select('*').eq('id',songId).single();
-  const { data:voices } = await sb.from('voices').select('*').eq('song_id',songId).order('position');
-  song.voices = (voices||[]).map(v=>({...v,muted:false,soloed:false}));
-  admSong = song;
-
-  document.getElementById('admin-editing-song-name').textContent = song.name;
-  admAudio.reset(song.voices.length);
-  song.voices.forEach((v,i) => { admAudio.gainNodes[i].gain.value = v.volume/100; });
-
+  const {data:song}=await sb.from('songs').select('*').eq('id',songId).single();
+  const {data:voices}=await sb.from('voices').select('*').eq('song_id',songId).order('position');
+  song.voices=(voices||[]).map(v=>({...v,muted:false,soloed:false}));
+  admSong=song;
+  document.getElementById('adm-song-title').textContent=song.name;
+  admEngine.reset(song.voices.length);
+  song.voices.forEach((v,i)=>{admEngine.gainNodes[i].gain.value=v.volume/100;});
   renderAdmTracks();
-
-  song.voices.forEach((v,i) => {
-    if (v.storage_path) {
-      const fsEl = document.getElementById('adm-fs-'+i);
-      if (fsEl) fsEl.textContent='⬇';
-      admAudio.loadBuf(i,v.storage_path).then(ok=>{if(fsEl)fsEl.textContent=ok?'✓':'⚠';});
-    }
+  song.voices.forEach((v,i)=>{
+    if(!v.storage_path) return;
+    const fs=document.getElementById('adm-fs-'+i);
+    if(fs) fs.textContent='⬇';
+    admEngine.loadFromUrl(i,v.storage_path).then(ok=>{if(fs)fs.textContent=ok?'✓':'⚠';});
   });
-
-  // Notes preview
-  const np = document.getElementById('adm-notes-preview');
-  if (song.notes_path) {
-    const url = pubUrl(song.notes_path);
-    np.innerHTML = song.notes_is_img
-      ? `<img src="${url}" style="width:100%;border-radius:var(--radius);border:1px solid var(--surface3);margin-top:.5rem">`
-      : `<p style="font-size:.8rem;color:var(--text3);margin-top:.5rem">📄 ${song.notes_name||'Notenblatt'} – <a href="${url}" target="_blank" style="color:var(--accent)">öffnen ↗</a></p>`;
+  const np=document.getElementById('adm-notes-preview');
+  if(song.notes_path){
+    const url=pubUrl(song.notes_path);
+    np.innerHTML=song.notes_is_img
+      ?`<img src="${url}" style="width:100%;border-radius:var(--radius);border:1px solid var(--surface3);margin-top:.5rem">`
+      :`<p style="font-size:.8rem;color:var(--text3);margin-top:.5rem">📄 ${song.notes_name||'Notenblatt'} – <a href="${url}" target="_blank" style="color:var(--accent)">öffnen ↗</a></p>`;
   } else { np.innerHTML='<p style="font-size:.8rem;color:var(--text3);margin-top:.5rem">Noch kein Notenblatt</p>'; }
 }
 
 function renderAdmTracks() {
-  if (!admSong) return;
-  const el = document.getElementById('adm-tracks');
-  el.innerHTML = admSong.voices.map((v,i)=>`
+  if(!admSong) return;
+  document.getElementById('adm-tracks').innerHTML=admSong.voices.map((v,i)=>`
     <div class="track-card${v.muted?' muted':''}${v.soloed?' soloed':''}" id="adm-tc-${i}">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-        <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <div style="display:flex;align-items:center;gap:8px">
           <div class="track-dot" style="background:${COLORS[i%COLORS.length]}"></div>
           <input class="track-name-input" id="adm-ni-${i}" value="${v.name}" maxlength="30"
             onfocus="this.style.borderBottomColor='var(--accent)'"
-            onblur="this.style.borderBottomColor='transparent';admRenameVoice(${i},this.value)"
+            onblur="this.style.borderBottomColor='transparent';admRename(${i},this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div class="track-btns">
           <button class="track-btn${v.muted?' mute-active':''}" id="adm-mb-${i}" onclick="admToggleMute(${i})">Stumm</button>
           <button class="track-btn${v.soloed?' solo-active':''}" id="adm-sb-${i}" onclick="admToggleSolo(${i})">Solo</button>
-          <button class="track-btn" style="border-color:var(--danger-border);color:var(--danger)" onclick="admDeleteVoice(${i})">✕</button>
+          <button class="track-btn btn-danger" onclick="admDeleteVoice(${i})">✕</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+      <div class="file-row">
         <span class="file-status" id="adm-fs-${i}">${v.storage_path?'✓':'—'}</span>
         <label class="file-label-btn" for="adm-fi-${i}">MP3 laden</label>
         <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,audio/*" onchange="admUploadAudio(${i},this)">
@@ -1100,80 +907,67 @@ function renderAdmTracks() {
     </div>`).join('');
 }
 
-function admToggleMute(i) {
-  if (!admSong) return;
-  admSong.voices[i].muted = !admSong.voices[i].muted;
-  document.getElementById('adm-tc-'+i).classList.toggle('muted', admSong.voices[i].muted);
-  document.getElementById('adm-mb-'+i).classList.toggle('mute-active', admSong.voices[i].muted);
-  if (admAudio.gainNodes[i]) admAudio.gainNodes[i].gain.value = admSong.voices[i].muted ? 0 : admSong.voices[i].volume/100;
+async function admRename(i,val) {
+  if(!admSong) return;
+  const t=val.trim(); if(!t){document.getElementById('adm-ni-'+i).value=admSong.voices[i].name;return;}
+  admSong.voices[i].name=t;
+  await sb.from('voices').update({name:t}).eq('id',admSong.voices[i].id);
 }
-
+function admSetVol(i,val) {
+  if(!admSong) return;
+  admSong.voices[i].volume=+val;
+  document.getElementById('adm-vp-'+i).textContent=val+'%';
+  if(admEngine.gainNodes[i]&&!admSong.voices[i].muted) admEngine.gainNodes[i].gain.value=val/100;
+  sb.from('voices').update({volume:+val}).eq('id',admSong.voices[i].id);
+}
+function admToggleMute(i) {
+  if(!admSong) return;
+  admSong.voices[i].muted=!admSong.voices[i].muted;
+  document.getElementById('adm-tc-'+i).classList.toggle('muted',admSong.voices[i].muted);
+  document.getElementById('adm-mb-'+i).classList.toggle('mute-active',admSong.voices[i].muted);
+  admEngine.gainNodes[i].gain.value=admSong.voices[i].muted?0:admSong.voices[i].volume/100;
+}
 function admToggleSolo(i) {
-  if (!admSong) return;
-  const was = admSong.voices[i].soloed;
-  admSong.voices.forEach((v,j) => {
+  if(!admSong) return;
+  const was=admSong.voices[i].soloed;
+  admSong.voices.forEach((v,j)=>{
     v.soloed=false;
     document.getElementById('adm-tc-'+j)?.classList.remove('soloed');
     document.getElementById('adm-sb-'+j)?.classList.remove('solo-active');
   });
-  if (!was) {
+  if(!was){
     admSong.voices[i].soloed=true;
     document.getElementById('adm-tc-'+i)?.classList.add('soloed');
     document.getElementById('adm-sb-'+i)?.classList.add('solo-active');
   }
-  const anySolo = admSong.voices.some(v=>v.soloed);
-  admSong.voices.forEach((v,j) => {
-    if (admAudio.gainNodes[j])
-      admAudio.gainNodes[j].gain.value = anySolo?(v.soloed?v.volume/100:0):(v.muted?0:v.volume/100);
+  const anySolo=admSong.voices.some(v=>v.soloed);
+  admSong.voices.forEach((v,j)=>{
+    if(admEngine.gainNodes[j]) admEngine.gainNodes[j].gain.value=anySolo?(v.soloed?v.volume/100:0):(v.muted?0:v.volume/100);
   });
 }
-
 async function admDeleteVoice(i) {
-  if (!admSong) return;
-  const v = admSong.voices[i];
-  if (!confirm(`"${v.name}" löschen?`)) return;
-  await sb.from('voices').delete().eq('id', v.id);
-  admSong.voices.splice(i, 1);
-  admAudio.stopAll(); admAudio.playOff();
-  admAudio.reset(admSong.voices.length);
-  admSong.voices.forEach((v,j) => { admAudio.gainNodes[j].gain.value = v.volume/100; });
+  if(!admSong) return;
+  if(!confirm(`"${admSong.voices[i].name}" löschen?`)) return;
+  await sb.from('voices').delete().eq('id',admSong.voices[i].id);
+  admSong.voices.splice(i,1);
+  admEngine.stop();
+  admEngine.reset(admSong.voices.length);
+  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].gain.value=v.volume/100;});
   renderAdmTracks();
-  admSong.voices.forEach((v,j) => { if(v.storage_path) admAudio.loadBuf(j, v.storage_path); });
+  admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme gelöscht');
 }
-
-async function admRenameVoice(i,val) {
-  if (!admSong) return;
-  const t=val.trim();
-  if (!t) { document.getElementById('adm-ni-'+i).value=admSong.voices[i].name; return; }
-  admSong.voices[i].name=t;
-  await sb.from('voices').update({name:t}).eq('id',admSong.voices[i].id);
-}
-
-function admSetVol(i,val) {
-  if (!admSong) return;
-  admSong.voices[i].volume=+val;
-  document.getElementById('adm-vp-'+i).textContent=val+'%';
-  if (admAudio.gainNodes[i]) admAudio.gainNodes[i].gain.value=val/100;
-  sb.from('voices').update({volume:+val}).eq('id',admSong.voices[i].id);
-}
-
 async function admAddVoice() {
-  if (!admSong) return;
-  const pos = admSong.voices.length;
-  if (pos>=20) { toast('Maximum 20 Stimmen'); return; }
-  const name = 'Stimme '+(pos+1);
-  const { data:v } = await sb.from('voices')
-    .insert({song_id:admSong.id,position:pos,name,volume:80,muted:false})
-    .select().single();
+  if(!admSong) return;
+  if(admSong.voices.length>=20){toast('Maximum 20 Stimmen');return;}
+  const pos=admSong.voices.length;
+  const {data:v}=await sb.from('voices').insert({song_id:admSong.id,position:pos,name:'Stimme '+(pos+1),volume:80,muted:false}).select().single();
   admSong.voices.push({...v,muted:false,soloed:false});
-  admAudio.reset(admSong.voices.length);
-  admSong.voices.forEach((v,i)=>{admAudio.gainNodes[i].gain.value=v.volume/100;});
+  admEngine.stop();
+  admEngine.reset(admSong.voices.length);
+  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].gain.value=v.volume/100;});
   renderAdmTracks();
-  // Reload existing buffers
-  admSong.voices.forEach((v,i)=>{
-    if(v.storage_path){admAudio.loadBuf(i,v.storage_path);}
-  });
+  admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme hinzugefügt');
 }
 
@@ -1195,7 +989,7 @@ async function admUploadAudio(i,input) {
   await sb.from('voices').update({storage_path:path,file_name:file.name}).eq('id',admSong.voices[i].id);
   fsEl.textContent='Dekodieren…';
   const ab=await file.arrayBuffer();
-  const ok=await admAudio.decodeBuf(i,ab);
+  const ok=await admEngine.loadFromArrayBuffer(i,ab);
   fsEl.textContent=ok?'✓':'⚠';
   if(ok) toast('✓ '+admSong.voices[i].name+' hochgeladen');
 }
@@ -1217,27 +1011,30 @@ async function admUploadNotes(input) {
   toast('✓ Notenblatt gespeichert');
 }
 
-function admTogglePlay() { admAudio.togglePlay(); }
-function admSkipBack()   { admAudio.skipBack(); }
-function admToggleLoop() { admAudio.toggleLoop(); }
-function admSeekTo(e)    { admAudio.seekTo(e); }
-function admSetTempo(v)  { admAudio.setTempo(v); }
-function admStopAll()    { admAudio.stopAll(); }
-function admPlayOff()    { admAudio.playOff(); }
+function admTogglePlay(){admEngine.togglePlay();}
+function admSkipBack(){admEngine.skipBack();}
+function admToggleLoop(){admEngine.toggleLoop();}
+function admSeekTo(e){admEngine.seek(e);}
+function admSetTempo(v){admEngine.setTempo(v);}
 
-// Admins
-let adminAdmins = [];
-async function adminLoadAdmins() {
-  const { data } = await sb.from('admins').select('*').order('created_at');
-  adminAdmins = data||[];
-  renderAdminAdmins();
+function switchAdminTab(tab) {
+  ['ensembles','songs','mixer','admins'].forEach(t=>{
+    const s=document.getElementById('atab-'+t); if(s)s.classList.toggle('active',t===tab);
+    const b=document.getElementById('atab-btn-'+t); if(b)b.classList.toggle('active',t===tab);
+  });
 }
 
+// Admins
+let adminAdmins=[];
+async function adminLoadAdmins() {
+  const {data}=await sb.from('admins').select('*').order('created_at');
+  adminAdmins=data||[]; renderAdminAdmins();
+}
 function renderAdminAdmins() {
-  const el = document.getElementById('admin-admins-list');
-  if (!adminAdmins.length) { el.innerHTML='<div class="empty">Keine Admins.</div>'; return; }
-  el.innerHTML = adminAdmins.map(a=>`
-    <div class="admin-card card-row">
+  const el=document.getElementById('admin-admins-list');
+  if(!adminAdmins.length){el.innerHTML='<div class="empty">Keine Admins.</div>';return;}
+  el.innerHTML=adminAdmins.map(a=>`
+    <div class="card card-row" style="margin-bottom:.75rem">
       <div>
         <div style="font-size:.95rem;font-weight:500">${a.name}</div>
         <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${a.password}</code></div>
@@ -1245,17 +1042,6 @@ function renderAdminAdmins() {
       ${a.id!==session.admin?.id?`<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>`:'<span style="font-size:.75rem;color:var(--text3)">Du</span>'}
     </div>`).join('');
 }
-
-async function changeMyPassword() {
-  const newPw = document.getElementById('my-pw-input').value.trim();
-  if (!newPw) { toast('Bitte Passwort eingeben'); return; }
-  await sb.from('admins').update({ password: newPw }).eq('id', session.admin.id);
-  session.admin.password = newPw;
-  document.getElementById('my-pw-input').value = '';
-  await adminLoadAdmins();
-  toast('✓ Passwort geändert');
-}
-
 async function addAdmin() {
   const name=document.getElementById('new-admin-name').value.trim();
   const pw=document.getElementById('new-admin-pw').value.trim();
@@ -1264,25 +1050,23 @@ async function addAdmin() {
   hideModal('modal-add-admin');
   document.getElementById('new-admin-name').value='';
   document.getElementById('new-admin-pw').value='';
-  await adminLoadAdmins();
-  toast('✓ Admin hinzugefügt');
+  await adminLoadAdmins(); toast('✓ Admin hinzugefügt');
 }
-
 async function deleteAdmin(id) {
-  if(!confirm('Admin wirklich löschen?')) return;
+  if(!confirm('Admin löschen?')) return;
   await sb.from('admins').delete().eq('id',id);
-  await adminLoadAdmins();
-  toast('Admin gelöscht');
+  await adminLoadAdmins(); toast('Gelöscht');
+}
+async function changeMyPassword() {
+  const pw=document.getElementById('my-pw-input').value.trim();
+  if(!pw){toast('Bitte Passwort eingeben');return;}
+  await sb.from('admins').update({password:pw}).eq('id',session.admin.id);
+  session.admin.password=pw;
+  document.getElementById('my-pw-input').value='';
+  await adminLoadAdmins(); toast('✓ Passwort geändert');
 }
 
-function switchAdminTab(tab) {
-  ['ensembles','songs','mixer','admins'].forEach(t=>{
-    const s=document.getElementById('atab-'+t); if(s) s.classList.toggle('active',t===tab);
-    const b=document.getElementById('atab-btn-'+t); if(b) b.classList.toggle('active',t===tab);
-  });
-}
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
