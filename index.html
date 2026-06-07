@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/soundtouchjs/0.1.30/soundtouch.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/soundtouch-js@0.0.2/dist/soundtouch.min.js"></script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -424,203 +424,170 @@ function showScreen(id) {
 function logoutEnsemble() { ensEngine.stop(); showScreen('screen-login'); }
 function logoutAdmin()    { admEngine.stop(); showScreen('screen-login'); }
 
-// ── SOUNDTOUCH ENGINE ─────────────────────────────────────────────────────────
-function makeSoundTouchEngine(prefix) {
+// ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
+function makeEngine(prefix) {
   let actx = null;
-  let buffers = [];      // AudioBuffer per voice
-  let gainNodes = [];    // GainNode per voice
-  let stNodes = [];      // ScriptProcessorNode per voice (SoundTouch)
-  let soundTouches = []; // SoundTouch instances
-  let filters = [];      // SimpleFilter instances
+  let buffers = [];
+  let gainNodes = [];
+  let shifters = [];   // PitchShifter per voice
   let playing = false;
   let looping = false;
   let tempoRate = 1.0;
   let duration = 0;
-  let startTime = 0;     // actx.currentTime when play started
-  let startOffset = 0;   // position in seconds when play started
-  let positions = [];    // current read position per voice (in samples)
+  let startOffset = 0;
   let ticker = null;
 
-  function fmt(s) {
-    const m=Math.floor(Math.max(0,s)/60), sc=Math.floor(Math.max(0,s)%60);
-    return m+':'+(sc<10?'0':'')+sc;
-  }
-  function el(id) { return document.getElementById(prefix+id); }
+  function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
+  function el(id){return document.getElementById(prefix+id);}
+  function ensureCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();}
 
-  function ensureCtx() {
-    if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
-  }
-
-  function stopNodes() {
-    stNodes.forEach(n => { try { n.disconnect(); } catch(e){} });
-    stNodes = []; soundTouches = []; filters = []; positions = [];
+  function disconnectShifters(){
+    shifters.forEach(s=>{try{s.disconnect();}catch(e){}});
+    shifters=[];
     clearInterval(ticker);
   }
 
-  function stop() {
-    stopNodes();
-    playing = false;
-    startOffset = 0;
-    const pf=el('-progress-fill'); if(pf) pf.style.width='0%';
-    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
-    const pb=el('-play-btn'); if(pb) pb.textContent='▶';
+  function stop(){
+    disconnectShifters();
+    playing=false; startOffset=0;
+    const pf=el('-progress-fill');if(pf)pf.style.width='0%';
+    const tc=el('-time-cur');if(tc)tc.textContent='0:00';
+    const pb=el('-play-btn');if(pb)pb.textContent='▶';
   }
 
-  function pause() {
-    if (!playing) return;
-    startOffset = Math.min(actx.currentTime - startTime, duration / tempoRate);
-    stopNodes();
-    playing = false;
-    const pb=el('-play-btn'); if(pb) pb.textContent='▶';
+  function pause(){
+    if(!playing)return;
+    // Save current position
+    const elapsed = shifters.find(s=>s)?._position||0;
+    startOffset = elapsed / (buffers.find(b=>b)?.sampleRate||44100);
+    disconnectShifters();
+    playing=false;
+    const pb=el('-play-btn');if(pb)pb.textContent='▶';
   }
 
-  function play() {
+  function play(){
     ensureCtx();
-    if (actx.state === 'suspended') actx.resume();
-    if (!buffers.some(b=>b)) { toast('Keine Audiodateien geladen'); return; }
-    stopNodes();
+    if(actx.state==='suspended')actx.resume();
+    if(!buffers.some(b=>b)){toast('Keine Audiodateien geladen');return;}
+    disconnectShifters();
 
-    const sampleRate = actx.sampleRate;
-    startTime = actx.currentTime;
-
-    buffers.forEach((buf, i) => {
-      if (!buf) return;
-
-      const st = new SoundTouch.SoundTouch(sampleRate);
-      st.tempo = tempoRate;
-      soundTouches[i] = st;
-
-      let readPos = Math.floor(startOffset * tempoRate * sampleRate);
-      positions[i] = readPos;
-
-      const ch0 = buf.getChannelData(0);
-      const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
-
-      const source = {
-        extract: function(target, numFrames, position) {
-          const pos = readPos + position;
-          let count = 0;
-          for (let k = 0; k < numFrames; k++) {
-            const idx = pos + k;
-            if (idx >= buf.length) break;
-            target[k*2]   = ch0[idx];
-            target[k*2+1] = ch1[idx];
-            count++;
-          }
-          return count;
+    buffers.forEach((buf,i)=>{
+      if(!buf)return;
+      try{
+        const shifter = new PitchShifter(actx, buf, 1024);
+        shifter.tempo = tempoRate;
+        shifter.pitch = 1.0;
+        // Seek to position
+        if(startOffset>0 && buf.duration>0){
+          shifter._position = Math.floor(startOffset * buf.sampleRate);
         }
-      };
-
-      const filter = new SoundTouch.SimpleFilter(source, st);
-      filters[i] = filter;
-
-      const bufSize = 4096;
-      const node = SoundTouch.getWebAudioNode(actx, filter, bufSize);
-      node.connect(gainNodes[i] || actx.destination);
-      stNodes[i] = node;
+        shifter.connect(gainNodes[i]||actx.destination);
+        shifters[i]=shifter;
+        // Listen for end
+        shifter.on('play', detail => {
+          if(detail.percentagePlayed >= 99.5){
+            if(looping){
+              startOffset=0;
+              stop(); play();
+            } else { stop(); }
+          }
+        });
+      }catch(e){console.error('PitchShifter error',e);}
     });
 
-    playing = true;
-    const pb=el('-play-btn'); if(pb) pb.textContent='⏸';
-    ticker = setInterval(tick, 100);
+    playing=true;
+    const pb=el('-play-btn');if(pb)pb.textContent='⏸';
+    ticker=setInterval(tick,100);
   }
 
-  function tick() {
-    if (!playing || !duration) return;
-    const elapsed = actx.currentTime - startTime + startOffset;
-    const total = duration / tempoRate;
-    if (elapsed >= total) {
-      if (looping) { startOffset=0; startTime=actx.currentTime; stopNodes();
-        // restart
-        play(); return;
-      } else { stop(); return; }
-    }
-    const pf=el('-progress-fill'); if(pf) pf.style.width=(elapsed/total*100)+'%';
-    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(elapsed);
+  function tick(){
+    if(!playing||!duration)return;
+    // Get position from first active shifter
+    const s=shifters.find(sh=>sh);
+    if(!s)return;
+    const pct = s.percentagePlayed||0;
+    const elapsed = (pct/100)*duration/tempoRate;
+    const total = duration/tempoRate;
+    const pf=el('-progress-fill');if(pf)pf.style.width=pct+'%';
+    const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
   }
 
-  function seek(e) {
-    const track=el('-progress-track'); if(!track) return;
+  function seek(e){
+    const track=el('-progress-track');if(!track)return;
     ensureCtx();
-    const rect = track.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX-rect.left)/rect.width));
-    const total = duration / tempoRate;
-    startOffset = pct * total;
-    const pf=el('-progress-fill'); if(pf) pf.style.width=(pct*100)+'%';
-    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(startOffset);
-    if (playing) { stopNodes(); startTime=actx.currentTime; play(); }
+    const rect=track.getBoundingClientRect();
+    const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+    startOffset=pct*duration;
+    const pf=el('-progress-fill');if(pf)pf.style.width=(pct*100)+'%';
+    const tc=el('-time-cur');if(tc)tc.textContent=fmt(startOffset);
+    if(playing){stop();play();}
   }
 
-  function setTempo(val) {
-    tempoRate = val / 100;
-    const tv=el('-tempo-val'); if(tv) tv.textContent=val+'%';
-    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
-    // Update live SoundTouch instances
-    soundTouches.forEach(st => { if(st) st.tempo=tempoRate; });
-    // If not playing yet, update offset display
-    if (playing) {
-      const elapsed = actx.currentTime - startTime + startOffset;
-      startOffset = elapsed;
-      startTime = actx.currentTime;
-    }
+  function setTempo(val){
+    tempoRate=val/100;
+    const tv=el('-tempo-val');if(tv)tv.textContent=val+'%';
+    const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+    // Update live shifters
+    shifters.forEach(s=>{if(s)s.tempo=tempoRate;});
   }
 
-  function toggleLoop() {
-    looping = !looping;
-    const lb=el('-loop-btn'); if(lb) lb.classList.toggle('active', looping);
-    toast(looping ? '🔁 Loop aktiv' : 'Loop deaktiviert');
+  function toggleLoop(){
+    looping=!looping;
+    const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
+    toast(looping?'🔁 Loop aktiv':'Loop deaktiviert');
   }
 
-  function reset(n) {
+  function reset(n){
     stop();
-    gainNodes.forEach(g => { try{g.disconnect();}catch(e){} });
-    gainNodes = []; buffers = new Array(n).fill(null);
+    gainNodes.forEach(g=>{try{g.disconnect();}catch(e){}});
+    gainNodes=[];buffers=new Array(n).fill(null);
     ensureCtx();
-    for (let i=0; i<n; i++) {
-      const g = actx.createGain();
-      g.gain.value = 0.8;
+    for(let i=0;i<n;i++){
+      const g=actx.createGain();
+      g.gain.value=0.8;
       g.connect(actx.destination);
-      gainNodes[i] = g;
+      gainNodes[i]=g;
     }
   }
 
-  async function loadFromUrl(i, path) {
+  async function loadFromUrl(i,path){
     ensureCtx();
-    try {
-      const res = await fetch(pubUrl(path));
-      if (!res.ok) throw new Error();
-      const ab = await res.arrayBuffer();
-      const buf = await actx.decodeAudioData(ab);
-      buffers[i] = buf;
-      duration = buffers.reduce((m,b)=>b?Math.max(m,b.duration):m, 0);
-      const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+    try{
+      const res=await fetch(pubUrl(path));
+      if(!res.ok)throw new Error();
+      const ab=await res.arrayBuffer();
+      const buf=await actx.decodeAudioData(ab);
+      buffers[i]=buf;
+      duration=buffers.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
+      const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
       return true;
-    } catch(e) { return false; }
+    }catch(e){return false;}
   }
 
-  async function loadFromArrayBuffer(i, ab) {
+  async function loadFromArrayBuffer(i,ab){
     ensureCtx();
-    try {
-      const buf = await actx.decodeAudioData(ab);
-      buffers[i] = buf;
-      duration = buffers.reduce((m,b)=>b?Math.max(m,b.duration):m, 0);
-      const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+    try{
+      const buf=await actx.decodeAudioData(ab);
+      buffers[i]=buf;
+      duration=buffers.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
+      const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
       return true;
-    } catch(e) { return false; }
+    }catch(e){return false;}
   }
 
   return {
     stop, pause, play,
-    togglePlay: () => { if(playing) pause(); else play(); },
-    skipBack: () => stop(),
+    togglePlay:()=>{if(playing)pause();else play();},
+    skipBack:()=>stop(),
     seek, setTempo, toggleLoop, reset, loadFromUrl, loadFromArrayBuffer,
-    get playing() { return playing; },
-    get gainNodes() { return gainNodes; },
+    get playing(){return playing;},
+    get gainNodes(){return gainNodes;},
   };
 }
 
-const ensEngine = makeSoundTouchEngine('ens');
-const admEngine = makeSoundTouchEngine('adm');
+const ensEngine = makeEngine('ens');
+
+const admEngine = makeEngine('adm');
 
 // ── ENSEMBLE VIEW ─────────────────────────────────────────────────────────────
 let ensSong = null;
