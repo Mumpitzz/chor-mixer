@@ -137,8 +137,12 @@
     .spinner{width:20px;height:20px;border:2px solid var(--surface3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:10px}
     @keyframes spin{to{transform:rotate(360deg)}}
     .empty{text-align:center;padding:2rem;color:var(--text3);font-size:.85rem}
-    .loop-region{position:absolute;top:0;height:100%;background:rgba(200,155,60,.3);border-left:2px solid var(--accent);border-right:2px solid var(--accent);pointer-events:none;border-radius:3px}
-    .progress-track{position:relative}
+    .loop-region{position:absolute;top:0;height:100%;background:rgba(200,155,60,.3);border-left:2px solid var(--accent);border-right:2px solid var(--accent);pointer-events:all;border-radius:3px}
+    .progress-track{position:relative;user-select:none}
+    .loop-handle{position:absolute;top:50%;transform:translateY(-50%);width:14px;height:22px;background:var(--accent);border-radius:3px;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none;z-index:10}
+    .loop-handle::after{content:'';display:block;width:2px;height:10px;background:rgba(0,0,0,.4);border-radius:1px;box-shadow:3px 0 0 rgba(0,0,0,.4),-3px 0 0 rgba(0,0,0,.4)}
+    .loop-handle-start{left:-7px}
+    .loop-handle-end{right:-7px}
   </style>
 </head>
 <body>
@@ -185,7 +189,10 @@
       <div class="card">
         <div class="progress-times"><span id="ens-time-cur">0:00</span><span id="ens-time-tot">0:00</span></div>
         <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)" oncontextmenu="ensSetLoopPoint(event)">
-          <div class="loop-region" id="ens-loop-region" style="display:none"></div>
+          <div class="loop-region" id="ens-loop-region" style="display:none">
+            <div class="loop-handle loop-handle-start" id="ens-loop-start-handle" onmousedown="startLoopDrag(event,'ens','start')" ontouchstart="startLoopDrag(event,'ens','start')"></div>
+            <div class="loop-handle loop-handle-end" id="ens-loop-end-handle" onmousedown="startLoopDrag(event,'ens','end')" ontouchstart="startLoopDrag(event,'ens','end')"></div>
+          </div>
           <div class="progress-fill" id="ens-progress-fill"></div>
         </div>
         <div id="ens-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
@@ -268,7 +275,10 @@
       <div class="card">
         <div class="progress-times"><span id="adm-time-cur">0:00</span><span id="adm-time-tot">0:00</span></div>
         <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)" oncontextmenu="admSetLoopPoint(event)">
-          <div class="loop-region" id="adm-loop-region" style="display:none"></div>
+          <div class="loop-region" id="adm-loop-region" style="display:none">
+            <div class="loop-handle loop-handle-start" id="adm-loop-start-handle" onmousedown="startLoopDrag(event,'adm','start')" ontouchstart="startLoopDrag(event,'adm','start')"></div>
+            <div class="loop-handle loop-handle-end" id="adm-loop-end-handle" onmousedown="startLoopDrag(event,'adm','end')" ontouchstart="startLoopDrag(event,'adm','end')"></div>
+          </div></div>
           <div class="progress-fill" id="adm-progress-fill"></div>
         </div>
         <div id="adm-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
@@ -576,9 +586,11 @@ function makeEngine(prefix) {
     if(!region)return;
     if(loopStart>=0&&loopEnd>loopStart&&duration>0){
       const totalDur=duration/tempoRate;
-      const left=(loopStart/totalDur*100)+'%';
-      const width=((loopEnd-loopStart)/totalDur*100)+'%';
-      region.style.left=left; region.style.width=width; region.style.display='block';
+      const leftPct=loopStart/totalDur*100;
+      const widthPct=(loopEnd-loopStart)/totalDur*100;
+      region.style.left=leftPct+'%';
+      region.style.width=widthPct+'%';
+      region.style.display='block';
       if(info)info.style.display='flex';
       if(label)label.textContent='Loop: '+fmt(loopStart)+' – '+fmt(loopEnd);
     } else {
@@ -586,6 +598,13 @@ function makeEngine(prefix) {
       if(info)info.style.display='none';
     }
   }
+
+  function setLoopStartVal(pos){ loopStart=Math.max(0,Math.min(pos,loopEnd>0?loopEnd-0.1:duration/tempoRate)); updateLoopRegion(); }
+  function setLoopEndVal(pos){ loopEnd=Math.max(loopStart>=0?loopStart+0.1:0.1,Math.min(pos,duration/tempoRate)); updateLoopRegion(); }
+  function getLoopStart(){ return loopStart; }
+  function getLoopEnd(){ return loopEnd; }
+  function getDuration(){ return duration; }
+  function getTempoRate(){ return tempoRate; }
 
   function clearLoop(){
     loopStart=-1; loopEnd=-1;
@@ -679,7 +698,9 @@ function makeEngine(prefix) {
     stop, pause, play,
     togglePlay:()=>{if(playing)pause();else play();},
     skipBack:()=>stop(),
-    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion, reset, loadFromUrl, loadFromBlob,
+    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
+    setLoopStartVal, setLoopEndVal, getLoopStart, getLoopEnd, getDuration, getTempoRate,
+    reset, loadFromUrl, loadFromBlob,
     get playing(){return playing;},
     get gainNodes(){return gainNodes;},
   };
@@ -1184,6 +1205,43 @@ async function changeMyPassword() {
   session.admin.password=pw;
   document.getElementById('my-pw-input').value='';
   await adminLoadAdmins(); toast('✓ Passwort geändert');
+}
+
+// ── LOOP DRAG ─────────────────────────────────────────────────────────────────
+let loopDragState = null;
+
+function startLoopDrag(e, enginePrefix, handle) {
+  e.preventDefault(); e.stopPropagation();
+  const engine = enginePrefix === 'ens' ? ensEngine : admEngine;
+  const trackId = enginePrefix + '-progress-track';
+  loopDragState = { engine, trackId, handle };
+  document.addEventListener('mousemove', onLoopDrag);
+  document.addEventListener('mouseup', endLoopDrag);
+  document.addEventListener('touchmove', onLoopDrag, { passive:false });
+  document.addEventListener('touchend', endLoopDrag);
+}
+
+function onLoopDrag(e) {
+  if (!loopDragState) return;
+  e.preventDefault();
+  const { engine, trackId, handle } = loopDragState;
+  const track = document.getElementById(trackId);
+  if (!track) return;
+  const rect = track.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const totalDur = engine.getDuration() / engine.getTempoRate();
+  const pos = pct * totalDur;
+  if (handle === 'start') engine.setLoopStartVal(pos);
+  else engine.setLoopEndVal(pos);
+}
+
+function endLoopDrag() {
+  loopDragState = null;
+  document.removeEventListener('mousemove', onLoopDrag);
+  document.removeEventListener('mouseup', endLoopDrag);
+  document.removeEventListener('touchmove', onLoopDrag);
+  document.removeEventListener('touchend', endLoopDrag);
 }
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
