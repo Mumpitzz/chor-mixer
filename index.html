@@ -9,7 +9,16 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/soundtouch-js@0.0.2/dist/soundtouch.min.js"></script>
+  <script src="https://unpkg.com/soundtouch-js@0.0.2/dist/soundtouch.min.js"></script>
+  <script>
+    // Normalize: soundtouch-js exposes PitchShifter differently depending on version
+    if (typeof PitchShifter === 'undefined' && typeof soundtouch !== 'undefined') {
+      var PitchShifter = soundtouch.PitchShifter;
+    }
+    if (typeof PitchShifter === 'undefined' && typeof SoundTouch !== 'undefined') {
+      var PitchShifter = SoundTouch.PitchShifter;
+    }
+  </script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
