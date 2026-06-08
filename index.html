@@ -150,6 +150,8 @@
       <div class="login-tab active" id="lt-ensemble" onclick="setLoginTab('ensemble')">Ensemble</div>
       <div class="login-tab" id="lt-admin" onclick="setLoginTab('admin')">Admin</div>
     </div>
+    <label class="field-label" id="login-name-label" style="display:none">Name</label>
+    <input class="field-input" type="text" id="login-name" placeholder="Dein Name" style="display:none" onkeydown="if(event.key==='Enter')doLogin()">
     <label class="field-label">Passwort</label>
     <input class="field-input" type="password" id="login-pw" placeholder="Passwort eingeben" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn-primary" onclick="doLogin()">Anmelden</button>
@@ -225,7 +227,7 @@
       <div class="icon-btn" onclick="logoutAdmin()">⏏</div>
     </div>
   </div>
-  <div class="tabs">
+  <div class="tabs" id="admin-tabs">
     <div class="tab active" id="atab-btn-ensembles" onclick="switchAdminTab('ensembles')">🎭 Ensembles</div>
     <div class="tab" id="atab-btn-songs" onclick="switchAdminTab('songs')">🎵 Lieder</div>
     <div class="tab" id="atab-btn-mixer" onclick="switchAdminTab('mixer')">🎚 Mixer</div>
@@ -332,7 +334,7 @@
   <div class="modal">
     <h3>Neues Lied</h3>
     <label class="field-label">Titel</label>
-    <input class="field-input" type="text" id="new-song-name" placeholder="z.B. Abide With Me">
+    <input class="field-input" type="text" id="new-song-name" placeholder="Titel">
     <div class="modal-btns">
       <button class="modal-btn" onclick="hideModal('modal-add-song')">Abbrechen</button>
       <button class="modal-btn primary" onclick="addSong()">Erstellen</button>
@@ -392,6 +394,9 @@ function setLoginTab(tab) {
   document.getElementById('lt-ensemble').classList.toggle('active', tab==='ensemble');
   document.getElementById('lt-admin').classList.toggle('active', tab==='admin');
   document.getElementById('login-error').style.display = 'none';
+  const isAdmin = tab === 'admin';
+  document.getElementById('login-name-label').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('login-name').style.display = isAdmin ? 'block' : 'none';
 }
 
 async function doLogin() {
@@ -399,10 +404,12 @@ async function doLogin() {
   if (!pw) return;
   document.getElementById('login-error').style.display = 'none';
   if (loginTab === 'admin') {
-    const { data } = await sb.from('admins').select('*').eq('password', pw).maybeSingle();
+    const name = document.getElementById('login-name').value.trim();
+    if (!name) { document.getElementById('login-error').style.display='block'; return; }
+    const { data } = await sb.from('admins').select('*').eq('name', name).eq('password', pw).maybeSingle();
     if (!data) { document.getElementById('login-error').style.display='block'; return; }
     session = { role:'admin', admin:data, ensemble:null };
-    document.getElementById('admin-badge').textContent = data.name;
+    document.getElementById('admin-badge').textContent = data.name + (data.is_owner ? ' ★' : '');
     showScreen('screen-admin');
     adminInit();
   } else {
@@ -723,13 +730,18 @@ function switchEnsTab(tab) {
 let adminEnsembles=[], adminSongs=[], admSong=null;
 
 async function adminInit() {
+  // Show admins tab only for owner
+  const adminsTab = document.getElementById('atab-btn-admins');
+  if (adminsTab) adminsTab.style.display = session.admin?.is_owner ? 'block' : 'none';
   await Promise.all([adminLoadEnsembles(), adminLoadAdmins()]);
   adminFillFilter();
 }
 
 // Ensembles
 async function adminLoadEnsembles() {
-  const { data, error } = await sb.from('ensembles').select('*').order('created_at');
+  let query = sb.from('ensembles').select('*').order('created_at');
+  if (!session.admin?.is_owner) query = query.eq('admin_id', session.admin.id);
+  const { data, error } = await query;
   if (error) { toast('Fehler: '+error.message, 5000); return; }
   adminEnsembles = data||[];
   renderAdminEnsembles();
@@ -1022,13 +1034,18 @@ async function adminLoadAdmins() {
 function renderAdminAdmins() {
   const el=document.getElementById('admin-admins-list');
   if(!adminAdmins.length){el.innerHTML='<div class="empty">Keine Admins.</div>';return;}
+  const isOwner = session.admin?.is_owner;
   el.innerHTML=adminAdmins.map(a=>`
     <div class="card card-row" style="margin-bottom:.75rem">
       <div>
-        <div style="font-size:.95rem;font-weight:500">${a.name}</div>
+        <div style="font-size:.95rem;font-weight:500">${a.name} ${a.is_owner?'<span style="font-size:.7rem;color:var(--accent2);background:var(--surface3);padding:2px 7px;border-radius:10px">Owner</span>':''}</div>
         <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${a.password}</code></div>
       </div>
-      ${a.id!==session.admin?.id?`<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>`:'<span style="font-size:.75rem;color:var(--text3)">Du</span>'}
+      <div style="display:flex;gap:6px;align-items:center">
+        ${a.id===session.admin?.id ? '<span style="font-size:.75rem;color:var(--text3)">Du</span>' :
+          (isOwner && !a.is_owner) ? `<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>` :
+          ''}
+      </div>
     </div>`).join('');
 }
 async function addAdmin() {
