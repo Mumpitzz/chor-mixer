@@ -137,6 +137,8 @@
     .spinner{width:20px;height:20px;border:2px solid var(--surface3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:10px}
     @keyframes spin{to{transform:rotate(360deg)}}
     .empty{text-align:center;padding:2rem;color:var(--text3);font-size:.85rem}
+    .loop-region{position:absolute;top:0;height:100%;background:rgba(200,155,60,.3);border-left:2px solid var(--accent);border-right:2px solid var(--accent);pointer-events:none;border-radius:3px}
+    .progress-track{position:relative}
   </style>
 </head>
 <body>
@@ -182,8 +184,13 @@
       </div>
       <div class="card">
         <div class="progress-times"><span id="ens-time-cur">0:00</span><span id="ens-time-tot">0:00</span></div>
-        <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)">
+        <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)" oncontextmenu="ensSetLoopPoint(event)">
+          <div class="loop-region" id="ens-loop-region" style="display:none"></div>
           <div class="progress-fill" id="ens-progress-fill"></div>
+        </div>
+        <div id="ens-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
+          <span id="ens-loop-label">Loop: — bis —</span>
+          <button onclick="ensClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
         </div>
       </div>
       <div class="card">
@@ -260,8 +267,13 @@
       </div>
       <div class="card">
         <div class="progress-times"><span id="adm-time-cur">0:00</span><span id="adm-time-tot">0:00</span></div>
-        <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)">
+        <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)" oncontextmenu="admSetLoopPoint(event)">
+          <div class="loop-region" id="adm-loop-region" style="display:none"></div>
           <div class="progress-fill" id="adm-progress-fill"></div>
+        </div>
+        <div id="adm-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
+          <span id="adm-loop-label">Loop: — bis —</span>
+          <button onclick="admClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
         </div>
       </div>
       <div class="card">
@@ -494,7 +506,13 @@ function makeEngine(prefix) {
     if(!a)return;
     const elapsed=a.currentTime;
     const total=duration/tempoRate;
-    if(elapsed>=total-0.1){
+    // Loop region check
+    if(looping&&loopStart>=0&&loopEnd>loopStart){
+      if(elapsed>=loopEnd){
+        audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});
+        return;
+      }
+    } else if(elapsed>=total-0.1){
       if(looping){
         audioEls.forEach(x=>{if(x)x.currentTime=0;});
       } else { stop(); return; }
@@ -528,10 +546,63 @@ function makeEngine(prefix) {
     });
   }
 
+  let loopStart = -1;
+  let loopEnd = -1;
+
+  function setLoopPoint(e){
+    const track=el('-progress-track');if(!track)return;
+    e.preventDefault();
+    const rect=track.getBoundingClientRect();
+    const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+    const pos=pct*duration/tempoRate;
+    if(loopStart<0||loopEnd>=0){
+      // Set start
+      loopStart=pos; loopEnd=-1;
+      toast('Loop-Start gesetzt – rechtsklick für Ende');
+    } else {
+      // Set end
+      if(pos<=loopStart){ toast('Ende muss nach Start liegen'); return; }
+      loopEnd=pos;
+      updateLoopRegion();
+      if(!looping){ looping=true; const lb=el('-loop-btn');if(lb)lb.classList.add('active'); }
+      toast('🔁 Loop: '+fmt(loopStart)+' – '+fmt(loopEnd));
+    }
+  }
+
+  function updateLoopRegion(){
+    const region=el('-loop-region');
+    const info=el('-loop-info');
+    const label=el('-loop-label');
+    if(!region)return;
+    if(loopStart>=0&&loopEnd>loopStart&&duration>0){
+      const totalDur=duration/tempoRate;
+      const left=(loopStart/totalDur*100)+'%';
+      const width=((loopEnd-loopStart)/totalDur*100)+'%';
+      region.style.left=left; region.style.width=width; region.style.display='block';
+      if(info)info.style.display='flex';
+      if(label)label.textContent='Loop: '+fmt(loopStart)+' – '+fmt(loopEnd);
+    } else {
+      region.style.display='none';
+      if(info)info.style.display='none';
+    }
+  }
+
+  function clearLoop(){
+    loopStart=-1; loopEnd=-1;
+    looping=false;
+    const lb=el('-loop-btn');if(lb)lb.classList.remove('active');
+    updateLoopRegion();
+    toast('Loop gelöscht');
+  }
+
   function toggleLoop(){
-    looping=!looping;
-    const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
-    toast(looping?'🔁 Loop aktiv':'Loop deaktiviert');
+    if(loopStart>=0&&loopEnd>loopStart){
+      looping=!looping;
+      const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
+      toast(looping?'🔁 Loop aktiv':'Loop pausiert');
+    } else {
+      toast('Rechtsklick auf Fortschrittsbalken: Start → Ende setzen');
+    }
   }
 
   function reset(n){
@@ -608,7 +679,7 @@ function makeEngine(prefix) {
     stop, pause, play,
     togglePlay:()=>{if(playing)pause();else play();},
     skipBack:()=>stop(),
-    seek, setTempo, toggleLoop, reset, loadFromUrl, loadFromBlob,
+    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion, reset, loadFromUrl, loadFromBlob,
     get playing(){return playing;},
     get gainNodes(){return gainNodes;},
   };
@@ -717,6 +788,8 @@ function ensSkipBack(){ensEngine.skipBack();}
 function ensToggleLoop(){ensEngine.toggleLoop();}
 function ensSeekTo(e){ensEngine.seek(e);}
 function ensSetTempo(v){ensEngine.setTempo(v);}
+function ensSetLoopPoint(e){ensEngine.setLoopPoint(e);}
+function ensClearLoop(){ensEngine.clearLoop();}
 
 function switchEnsTab(tab) {
   ['mixer','notes'].forEach(t=>{
@@ -750,17 +823,31 @@ async function adminLoadEnsembles() {
 function renderAdminEnsembles() {
   const el = document.getElementById('admin-ensembles-list');
   if (!adminEnsembles.length) { el.innerHTML='<div class="empty">Noch keine Ensembles.</div>'; return; }
-  el.innerHTML = adminEnsembles.map(e=>`
-    <div class="card card-row" style="margin-bottom:.75rem">
-      <div>
-        <div style="font-size:.95rem;font-weight:500">${e.name}</div>
-        <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${e.password}</code></div>
+  const isOwner = session.admin?.is_owner;
+  el.innerHTML = adminEnsembles.map(e=>{
+    const owner = adminAdmins.find(a=>a.id===e.admin_id);
+    return `
+    <div class="card" style="margin-bottom:.75rem">
+      <div class="card-row" style="margin-bottom:.5rem">
+        <div>
+          <div style="font-size:.95rem;font-weight:500">${e.name}</div>
+          <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${e.password}</code>${isOwner&&owner?' · Admin: '+owner.name:''}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
+          <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
+        </div>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
-        <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
-      </div>
-    </div>`).join('');
+      ${isOwner&&adminAdmins.filter(a=>!a.is_owner).length>0?`
+        <div style="display:flex;gap:8px;align-items:center;margin-top:.25rem">
+          <select id="assign-${e.id}" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.4rem .7rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none">
+            <option value="">Ensemble zuweisen an…</option>
+            ${adminAdmins.filter(a=>!a.is_owner).map(a=>`<option value="${a.id}"${a.id===e.admin_id?' selected':''}>${a.name}</option>`).join('')}
+          </select>
+          <button class="btn btn-accent" style="padding:.4rem .75rem;font-size:.78rem" onclick="assignEnsemble('${e.id}')">Zuweisen</button>
+        </div>`:''}
+    </div>`;
+  }).join('');
 }
 
 async function addEnsemble() {
@@ -797,6 +884,15 @@ async function deleteEnsemble(id) {
   if(!confirm('Ensemble und alle Lieder löschen?')) return;
   await sb.from('ensembles').delete().eq('id',id);
   await adminLoadEnsembles(); adminFillFilter(); toast('Gelöscht');
+}
+async function assignEnsemble(ensId) {
+  const sel = document.getElementById('assign-'+ensId);
+  const adminId = sel?.value;
+  if(!adminId){toast('Bitte Admin auswählen');return;}
+  const {error} = await sb.from('ensembles').update({admin_id:adminId}).eq('id',ensId);
+  if(error){toast('Fehler: '+error.message);return;}
+  await adminLoadEnsembles();
+  toast('✓ Ensemble zugewiesen');
 }
 
 function adminFillFilter() {
@@ -1017,6 +1113,8 @@ function admSkipBack(){admEngine.skipBack();}
 function admToggleLoop(){admEngine.toggleLoop();}
 function admSeekTo(e){admEngine.seek(e);}
 function admSetTempo(v){admEngine.setTempo(v);}
+function admSetLoopPoint(e){admEngine.setLoopPoint(e);}
+function admClearLoop(){admEngine.clearLoop();}
 
 function switchAdminTab(tab) {
   ['ensembles','songs','mixer','admins'].forEach(t=>{
@@ -1035,17 +1133,23 @@ function renderAdminAdmins() {
   const el=document.getElementById('admin-admins-list');
   if(!adminAdmins.length){el.innerHTML='<div class="empty">Keine Admins.</div>';return;}
   const isOwner = session.admin?.is_owner;
+  const isMe = id => id===session.admin?.id;
   el.innerHTML=adminAdmins.map(a=>`
-    <div class="card card-row" style="margin-bottom:.75rem">
-      <div>
-        <div style="font-size:.95rem;font-weight:500">${a.name} ${a.is_owner?'<span style="font-size:.7rem;color:var(--accent2);background:var(--surface3);padding:2px 7px;border-radius:10px">Owner</span>':''}</div>
-        <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${a.password}</code></div>
+    <div class="card" style="margin-bottom:.75rem">
+      <div class="card-row" style="margin-bottom:${isOwner&&!isMe(a.id)?'.5rem':'0'}">
+        <div>
+          <div style="font-size:.95rem;font-weight:500">${a.name} ${a.is_owner?'<span style="font-size:.7rem;color:var(--accent2);background:var(--surface3);padding:2px 7px;border-radius:10px">Owner</span>':''} ${isMe(a.id)?'<span style="font-size:.7rem;color:var(--text3)">(Du)</span>':''}</div>
+          ${isMe(a.id)?`<div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${a.password}</code></div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${(isOwner&&!isMe(a.id)&&!a.is_owner)?`<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>`:''}
+        </div>
       </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        ${a.id===session.admin?.id ? '<span style="font-size:.75rem;color:var(--text3)">Du</span>' :
-          (isOwner && !a.is_owner) ? `<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>` :
-          ''}
-      </div>
+      ${(isOwner&&!isMe(a.id)&&!a.is_owner)?`
+        <div style="display:flex;gap:8px;align-items:center;margin-top:.25rem">
+          <input type="text" id="reset-pw-${a.id}" placeholder="Neues Passwort" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.45rem .75rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.8rem;outline:none">
+          <button class="btn btn-accent" style="padding:.45rem .8rem;font-size:.78rem" onclick="resetAdminPw('${a.id}')">Zurücksetzen</button>
+        </div>`:''}
     </div>`).join('');
 }
 async function addAdmin() {
@@ -1062,6 +1166,16 @@ async function deleteAdmin(id) {
   if(!confirm('Admin löschen?')) return;
   await sb.from('admins').delete().eq('id',id);
   await adminLoadAdmins(); toast('Gelöscht');
+}
+async function resetAdminPw(id) {
+  const input = document.getElementById('reset-pw-'+id);
+  const pw = input?.value.trim();
+  if(!pw){toast('Bitte neues Passwort eingeben');return;}
+  const {error} = await sb.from('admins').update({password:pw}).eq('id',id);
+  if(error){toast('Fehler: '+error.message);return;}
+  input.value='';
+  await adminLoadAdmins();
+  toast('✓ Passwort zurückgesetzt');
 }
 async function changeMyPassword() {
   const pw=document.getElementById('my-pw-input').value.trim();
