@@ -9,16 +9,6 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/soundtouch-js@0.0.2/dist/soundtouch.min.js"></script>
-  <script>
-    // Normalize: soundtouch-js exposes PitchShifter differently depending on version
-    if (typeof PitchShifter === 'undefined' && typeof soundtouch !== 'undefined') {
-      var PitchShifter = soundtouch.PitchShifter;
-    }
-    if (typeof PitchShifter === 'undefined' && typeof SoundTouch !== 'undefined') {
-      var PitchShifter = SoundTouch.PitchShifter;
-    }
-  </script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -434,31 +424,31 @@ function logoutEnsemble() { ensEngine.stop(); showScreen('screen-login'); }
 function logoutAdmin()    { admEngine.stop(); showScreen('screen-login'); }
 
 // ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
+// Uses HTML5 Audio elements with preservesPitch for reliable tempo change
+// without pitch shift - works natively in Chrome, Safari, Firefox
 function makeEngine(prefix) {
+  let audioEls = [];   // HTMLAudioElement per voice
+  let gainNodes = [];  // GainNode per voice (for volume/mute)
+  let srcNodes = [];   // MediaElementSourceNode per voice
   let actx = null;
-  let buffers = [];
-  let gainNodes = [];
-  let shifters = [];   // PitchShifter per voice
+  let buffers = {};    // objectURL per voice index
   let playing = false;
   let looping = false;
   let tempoRate = 1.0;
   let duration = 0;
-  let startOffset = 0;
   let ticker = null;
 
   function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
   function el(id){return document.getElementById(prefix+id);}
-  function ensureCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();}
 
-  function disconnectShifters(){
-    shifters.forEach(s=>{try{s.disconnect();}catch(e){}});
-    shifters=[];
-    clearInterval(ticker);
+  function ensureCtx(){
+    if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
   }
 
   function stop(){
-    disconnectShifters();
-    playing=false; startOffset=0;
+    audioEls.forEach(a=>{try{a.pause();a.currentTime=0;}catch(e){}});
+    clearInterval(ticker);
+    playing=false;
     const pf=el('-progress-fill');if(pf)pf.style.width='0%';
     const tc=el('-time-cur');if(tc)tc.textContent='0:00';
     const pb=el('-play-btn');if(pb)pb.textContent='▶';
@@ -466,10 +456,8 @@ function makeEngine(prefix) {
 
   function pause(){
     if(!playing)return;
-    // Save current position
-    const elapsed = shifters.find(s=>s)?._position||0;
-    startOffset = elapsed / (buffers.find(b=>b)?.sampleRate||44100);
-    disconnectShifters();
+    audioEls.forEach(a=>{try{a.pause();}catch(e){}});
+    clearInterval(ticker);
     playing=false;
     const pb=el('-play-btn');if(pb)pb.textContent='▶';
   }
@@ -477,31 +465,15 @@ function makeEngine(prefix) {
   function play(){
     ensureCtx();
     if(actx.state==='suspended')actx.resume();
-    if(!buffers.some(b=>b)){toast('Keine Audiodateien geladen');return;}
-    disconnectShifters();
+    if(!audioEls.some(a=>a&&a.src)){toast('Keine Audiodateien geladen');return;}
 
-    buffers.forEach((buf,i)=>{
-      if(!buf)return;
-      try{
-        const shifter = new PitchShifter(actx, buf, 1024);
-        shifter.tempo = tempoRate;
-        shifter.pitch = 1.0;
-        // Seek to position
-        if(startOffset>0 && buf.duration>0){
-          shifter._position = Math.floor(startOffset * buf.sampleRate);
-        }
-        shifter.connect(gainNodes[i]||actx.destination);
-        shifters[i]=shifter;
-        // Listen for end
-        shifter.on('play', detail => {
-          if(detail.percentagePlayed >= 99.5){
-            if(looping){
-              startOffset=0;
-              stop(); play();
-            } else { stop(); }
-          }
-        });
-      }catch(e){console.error('PitchShifter error',e);}
+    audioEls.forEach(a=>{
+      if(!a||!a.src)return;
+      a.playbackRate = tempoRate;
+      a.preservesPitch = true;
+      a.mozPreservesPitch = true;
+      a.webkitPreservesPitch = true;
+      a.play().catch(e=>console.warn('play error',e));
     });
 
     playing=true;
@@ -511,33 +483,42 @@ function makeEngine(prefix) {
 
   function tick(){
     if(!playing||!duration)return;
-    // Get position from first active shifter
-    const s=shifters.find(sh=>sh);
-    if(!s)return;
-    const pct = s.percentagePlayed||0;
-    const elapsed = (pct/100)*duration/tempoRate;
-    const total = duration/tempoRate;
-    const pf=el('-progress-fill');if(pf)pf.style.width=pct+'%';
+    const a=audioEls.find(x=>x&&x.src&&!x.paused);
+    if(!a)return;
+    const elapsed=a.currentTime;
+    const total=duration/tempoRate;
+    if(elapsed>=total-0.1){
+      if(looping){
+        audioEls.forEach(x=>{if(x)x.currentTime=0;});
+      } else { stop(); return; }
+    }
+    const pf=el('-progress-fill');if(pf)pf.style.width=(elapsed/total*100)+'%';
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
   }
 
   function seek(e){
-    const track=el('-progress-track');if(!track)return;
     ensureCtx();
+    const track=el('-progress-track');if(!track)return;
     const rect=track.getBoundingClientRect();
     const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    startOffset=pct*duration;
+    const total=duration/tempoRate;
+    const pos=pct*total;
+    audioEls.forEach(a=>{if(a&&a.src)a.currentTime=pos;});
     const pf=el('-progress-fill');if(pf)pf.style.width=(pct*100)+'%';
-    const tc=el('-time-cur');if(tc)tc.textContent=fmt(startOffset);
-    if(playing){stop();play();}
+    const tc=el('-time-cur');if(tc)tc.textContent=fmt(pos);
   }
 
   function setTempo(val){
     tempoRate=val/100;
     const tv=el('-tempo-val');if(tv)tv.textContent=val+'%';
     const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
-    // Update live shifters
-    shifters.forEach(s=>{if(s)s.tempo=tempoRate;});
+    audioEls.forEach(a=>{
+      if(!a||!a.src)return;
+      a.playbackRate=tempoRate;
+      a.preservesPitch=true;
+      a.mozPreservesPitch=true;
+      a.webkitPreservesPitch=true;
+    });
   }
 
   function toggleLoop(){
@@ -548,38 +529,70 @@ function makeEngine(prefix) {
 
   function reset(n){
     stop();
+    // Revoke old object URLs
+    Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
+    buffers={};
+    // Disconnect old audio nodes
+    srcNodes.forEach(s=>{try{s.disconnect();}catch(e){}});
+    srcNodes=[];
     gainNodes.forEach(g=>{try{g.disconnect();}catch(e){}});
-    gainNodes=[];buffers=new Array(n).fill(null);
+    gainNodes=[];
+    audioEls=[];
     ensureCtx();
     for(let i=0;i<n;i++){
+      const a=new Audio();
+      a.crossOrigin='anonymous';
+      audioEls[i]=a;
+      const src=actx.createMediaElementSource(a);
       const g=actx.createGain();
       g.gain.value=0.8;
+      src.connect(g);
       g.connect(actx.destination);
       gainNodes[i]=g;
+      srcNodes[i]=src;
     }
   }
 
   async function loadFromUrl(i,path){
-    ensureCtx();
+    if(!audioEls[i])return false;
     try{
+      // Fetch and create object URL so we know duration
       const res=await fetch(pubUrl(path));
       if(!res.ok)throw new Error();
-      const ab=await res.arrayBuffer();
-      const buf=await actx.decodeAudioData(ab);
-      buffers[i]=buf;
-      duration=buffers.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
-      const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      if(buffers[i])URL.revokeObjectURL(buffers[i]);
+      buffers[i]=url;
+      audioEls[i].src=url;
+      await new Promise((res,rej)=>{
+        audioEls[i].onloadedmetadata=()=>res();
+        audioEls[i].onerror=rej;
+        setTimeout(res,3000);
+      });
+      if(audioEls[i].duration>duration){
+        duration=audioEls[i].duration;
+        const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+      }
       return true;
     }catch(e){return false;}
   }
 
-  async function loadFromArrayBuffer(i,ab){
-    ensureCtx();
+  async function loadFromBlob(i,blob){
+    if(!audioEls[i])return false;
     try{
-      const buf=await actx.decodeAudioData(ab);
-      buffers[i]=buf;
-      duration=buffers.reduce((m,b)=>b?Math.max(m,b.duration):m,0);
-      const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+      const url=URL.createObjectURL(blob);
+      if(buffers[i])URL.revokeObjectURL(buffers[i]);
+      buffers[i]=url;
+      audioEls[i].src=url;
+      await new Promise((res,rej)=>{
+        audioEls[i].onloadedmetadata=()=>res();
+        audioEls[i].onerror=rej;
+        setTimeout(res,3000);
+      });
+      if(audioEls[i].duration>duration){
+        duration=audioEls[i].duration;
+        const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+      }
       return true;
     }catch(e){return false;}
   }
@@ -588,13 +601,14 @@ function makeEngine(prefix) {
     stop, pause, play,
     togglePlay:()=>{if(playing)pause();else play();},
     skipBack:()=>stop(),
-    seek, setTempo, toggleLoop, reset, loadFromUrl, loadFromArrayBuffer,
+    seek, setTempo, toggleLoop, reset, loadFromUrl, loadFromBlob,
     get playing(){return playing;},
     get gainNodes(){return gainNodes;},
   };
 }
 
 const ensEngine = makeEngine('ens');
+
 
 const admEngine = makeEngine('adm');
 
@@ -964,8 +978,7 @@ async function admUploadAudio(i,input) {
   admSong.voices[i].storage_path=path; admSong.voices[i].file_name=file.name;
   await sb.from('voices').update({storage_path:path,file_name:file.name}).eq('id',admSong.voices[i].id);
   fsEl.textContent='Dekodieren…';
-  const ab=await file.arrayBuffer();
-  const ok=await admEngine.loadFromArrayBuffer(i,ab);
+  const ok=await admEngine.loadFromBlob(i,file);
   fsEl.textContent=ok?'✓':'⚠';
   if(ok) toast('✓ '+admSong.voices[i].name+' hochgeladen');
 }
