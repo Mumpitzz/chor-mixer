@@ -201,16 +201,38 @@
       <div id="ens-announcements"></div>
       <div class="card">
         <div class="progress-times"><span id="ens-time-cur">0:00</span><span id="ens-time-tot">0:00</span></div>
-        <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)" oncontextmenu="ensSetLoopPoint(event)">
+        <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)">
           <div class="loop-region" id="ens-loop-region" style="display:none">
             <div class="loop-handle loop-handle-start" id="ens-loop-start-handle" onmousedown="startLoopDrag(event,'ens','start')" ontouchstart="startLoopDrag(event,'ens','start')"></div>
             <div class="loop-handle loop-handle-end" id="ens-loop-end-handle" onmousedown="startLoopDrag(event,'ens','end')" ontouchstart="startLoopDrag(event,'ens','end')"></div>
           </div>
           <div class="progress-fill" id="ens-progress-fill"></div>
         </div>
-        <div id="ens-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
-          <span id="ens-loop-label">Loop: — bis —</span>
-          <button onclick="ensClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
+        <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--surface3)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+            <span style="font-size:.75rem;color:var(--text3)">Loop-Bereich</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:.72rem;color:var(--accent2)" id="ens-loop-label">—</span>
+              <button class="transport-btn active" id="ens-loop-btn" onclick="ensToggleLoop()" style="width:28px;height:28px;font-size:.75rem">🔁</button>
+              <button onclick="ensClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
+            </div>
+          </div>
+          <div style="position:relative;height:20px;margin:0 8px">
+            <div style="position:absolute;top:50%;left:0;right:0;height:4px;background:var(--surface3);border-radius:2px;transform:translateY(-50%)"></div>
+            <div id="ens-loop-fill" style="position:absolute;top:50%;height:4px;background:var(--accent);border-radius:2px;transform:translateY(-50%);left:0%;width:100%"></div>
+            <input type="range" id="ens-loop-start" min="0" max="1000" value="0" step="1"
+              style="position:absolute;width:100%;top:50%;transform:translateY(-50%);opacity:0;cursor:pointer;z-index:2;margin:0"
+              oninput="ensLoopSlider()">
+            <input type="range" id="ens-loop-end" min="0" max="1000" value="1000" step="1"
+              style="position:absolute;width:100%;top:50%;transform:translateY(-50%);opacity:0;cursor:pointer;z-index:2;margin:0"
+              oninput="ensLoopSlider()">
+            <div id="ens-lh-start" style="position:absolute;top:50%;width:14px;height:22px;background:var(--accent);border-radius:3px;transform:translate(-50%,-50%);left:0%;pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center">
+              <span style="width:2px;height:10px;background:rgba(0,0,0,.4);border-radius:1px;box-shadow:3px 0 0 rgba(0,0,0,.4),-3px 0 0 rgba(0,0,0,.4);display:block"></span>
+            </div>
+            <div id="ens-lh-end" style="position:absolute;top:50%;width:14px;height:22px;background:var(--accent);border-radius:3px;transform:translate(-50%,-50%);left:100%;pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center">
+              <span style="width:2px;height:10px;background:rgba(0,0,0,.4);border-radius:1px;box-shadow:3px 0 0 rgba(0,0,0,.4),-3px 0 0 rgba(0,0,0,.4);display:block"></span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -272,7 +294,7 @@
   <div class="tabs" id="admin-tabs">
     <div class="tab active" id="atab-btn-ensembles" onclick="switchAdminTab('ensembles')">🎭 Ensembles</div>
     <div class="tab" id="atab-btn-songs" onclick="switchAdminTab('songs')">🎵 Lieder</div>
-    <div class="tab" id="atab-btn-mixer" onclick="switchAdminTab('mixer')">🎚 Mixer</div>
+    <div class="tab" id="atab-btn-mixer" onclick="switchAdminTab('mixer')" style="display:none">🎚 Mixer</div>
     <div class="tab" id="atab-btn-admins" onclick="switchAdminTab('admins')">👤 Admins</div>
   </div>
   <div class="content">
@@ -305,16 +327,38 @@
       </div>
       <div class="card">
         <div class="progress-times"><span id="adm-time-cur">0:00</span><span id="adm-time-tot">0:00</span></div>
-        <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)" oncontextmenu="admSetLoopPoint(event)">
+        <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)">
           <div class="loop-region" id="adm-loop-region" style="display:none">
             <div class="loop-handle loop-handle-start" id="adm-loop-start-handle" onmousedown="startLoopDrag(event,'adm','start')" ontouchstart="startLoopDrag(event,'adm','start')"></div>
             <div class="loop-handle loop-handle-end" id="adm-loop-end-handle" onmousedown="startLoopDrag(event,'adm','end')" ontouchstart="startLoopDrag(event,'adm','end')"></div>
           </div></div>
           <div class="progress-fill" id="adm-progress-fill"></div>
         </div>
-        <div id="adm-loop-info" style="display:none;font-size:.72rem;color:var(--accent);margin-top:.4rem;display:flex;align-items:center;justify-content:space-between">
-          <span id="adm-loop-label">Loop: — bis —</span>
-          <button onclick="admClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
+        <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--surface3)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+            <span style="font-size:.75rem;color:var(--text3)">Loop-Bereich</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:.72rem;color:var(--accent2)" id="adm-loop-label">—</span>
+              <button class="transport-btn active" id="adm-loop-btn" onclick="admToggleLoop()" style="width:28px;height:28px;font-size:.75rem">🔁</button>
+              <button onclick="admClearLoop()" style="font-size:.7rem;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline">löschen</button>
+            </div>
+          </div>
+          <div style="position:relative;height:20px;margin:0 8px">
+            <div style="position:absolute;top:50%;left:0;right:0;height:4px;background:var(--surface3);border-radius:2px;transform:translateY(-50%)"></div>
+            <div id="adm-loop-fill" style="position:absolute;top:50%;height:4px;background:var(--accent);border-radius:2px;transform:translateY(-50%);left:0%;width:100%"></div>
+            <input type="range" id="adm-loop-start" min="0" max="1000" value="0" step="1"
+              style="position:absolute;width:100%;top:50%;transform:translateY(-50%);opacity:0;cursor:pointer;z-index:2;margin:0"
+              oninput="admLoopSlider()">
+            <input type="range" id="adm-loop-end" min="0" max="1000" value="1000" step="1"
+              style="position:absolute;width:100%;top:50%;transform:translateY(-50%);opacity:0;cursor:pointer;z-index:2;margin:0"
+              oninput="admLoopSlider()">
+            <div id="adm-lh-start" style="position:absolute;top:50%;width:14px;height:22px;background:var(--accent);border-radius:3px;transform:translate(-50%,-50%);left:0%;pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center">
+              <span style="width:2px;height:10px;background:rgba(0,0,0,.4);border-radius:1px;box-shadow:3px 0 0 rgba(0,0,0,.4),-3px 0 0 rgba(0,0,0,.4);display:block"></span>
+            </div>
+            <div id="adm-lh-end" style="position:absolute;top:50%;width:14px;height:22px;background:var(--accent);border-radius:3px;transform:translate(-50%,-50%);left:100%;pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center">
+              <span style="width:2px;height:10px;background:rgba(0,0,0,.4);border-radius:1px;box-shadow:3px 0 0 rgba(0,0,0,.4),-3px 0 0 rgba(0,0,0,.4);display:block"></span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -697,6 +741,10 @@ function makeEngine(prefix) {
 
   function reset(n){
     stop();
+    // Reset duration for new song
+    duration = 0;
+    const tt=el('-time-tot'); if(tt) tt.textContent='0:00';
+    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
     // Revoke old object URLs
     Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
     buffers={};
@@ -721,10 +769,20 @@ function makeEngine(prefix) {
     }
   }
 
+  function recalcDuration() {
+    // Only count audio elements that have a valid src and duration
+    let max = 0;
+    audioEls.forEach(a => {
+      if (a && a.src && a.duration && isFinite(a.duration)) {
+        max = Math.max(max, a.duration);
+      }
+    });
+    duration = max;
+    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+  }
   async function loadFromUrl(i,path){
     if(!audioEls[i])return false;
     try{
-      // Fetch and create object URL so we know duration
       const res=await fetch(pubUrl(path));
       if(!res.ok)throw new Error();
       const blob=await res.blob();
@@ -732,15 +790,12 @@ function makeEngine(prefix) {
       if(buffers[i])URL.revokeObjectURL(buffers[i]);
       buffers[i]=url;
       audioEls[i].src=url;
-      await new Promise((res,rej)=>{
-        audioEls[i].onloadedmetadata=()=>res();
-        audioEls[i].onerror=rej;
-        setTimeout(res,3000);
+      await new Promise((resolve)=>{
+        audioEls[i].onloadedmetadata=()=>resolve();
+        audioEls[i].onerror=()=>resolve();
+        setTimeout(resolve,3000);
       });
-      if(audioEls[i].duration>duration){
-        duration=audioEls[i].duration;
-        const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
-      }
+      recalcDuration();
       return true;
     }catch(e){return false;}
   }
@@ -752,15 +807,12 @@ function makeEngine(prefix) {
       if(buffers[i])URL.revokeObjectURL(buffers[i]);
       buffers[i]=url;
       audioEls[i].src=url;
-      await new Promise((res,rej)=>{
-        audioEls[i].onloadedmetadata=()=>res();
-        audioEls[i].onerror=rej;
-        setTimeout(res,3000);
+      await new Promise((resolve)=>{
+        audioEls[i].onloadedmetadata=()=>resolve();
+        audioEls[i].onerror=()=>resolve();
+        setTimeout(resolve,3000);
       });
-      if(audioEls[i].duration>duration){
-        duration=audioEls[i].duration;
-        const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
-      }
+      recalcDuration();
       return true;
     }catch(e){return false;}
   }
@@ -1472,7 +1524,11 @@ loadEnsSong = async function(id) {
 
 // ── PATCH openAdmMixer to load markers ────────────────────────────────────────
 const _origOpenAdmMixer = openAdmMixer;
+// Show mixer tab when song is opened
 openAdmMixer = async function(songId) {
+  // Show mixer tab
+  const mixerTab = document.getElementById('atab-btn-mixer');
+  if (mixerTab) mixerTab.style.display = 'block';
   await _origOpenAdmMixer(songId);
   if (admSong?.markers) {
     try {
@@ -1510,7 +1566,70 @@ openAdmMixer = async function(songId) {
 // ── SQL HINT FOR ANNOUNCEMENTS ────────────────────────────────────────────────
 // SQL needed: CREATE TABLE announcements (id uuid primary key default gen_random_uuid(), ensemble_id uuid references ensembles(id) on delete cascade, text text not null, admin_name text, created_at timestamp default now()); + RLS policies
 
-// ── LOOP DRAG ─────────────────────────────────────────────────────────────────
+// ── LOOP SLIDERS ─────────────────────────────────────────────────────────────
+function updateLoopSliderUI(prefix, engine) {
+  const dur = engine.getDuration() / engine.getTempoRate();
+  if (!dur) return;
+  const startPct = engine.getLoopStart() >= 0 ? (engine.getLoopStart() / dur * 100) : 0;
+  const endPct   = engine.getLoopEnd()   >= 0 ? (engine.getLoopEnd()   / dur * 100) : 100;
+
+  const fill  = document.getElementById(prefix+'-loop-fill');
+  const hsEl  = document.getElementById(prefix+'-lh-start');
+  const heEl  = document.getElementById(prefix+'-lh-end');
+  const label = document.getElementById(prefix+'-loop-label');
+
+  if (fill)  { fill.style.left = startPct+'%'; fill.style.width = (endPct-startPct)+'%'; }
+  if (hsEl)  hsEl.style.left = startPct+'%';
+  if (heEl)  heEl.style.left = endPct+'%';
+  if (label) {
+    const s = engine.getLoopStart(), e = engine.getLoopEnd();
+    label.textContent = s>=0 && e>s ? fmt(s)+' – '+fmt(e) : '—';
+  }
+}
+
+function loopSlider(prefix, engine) {
+  const sEl = document.getElementById(prefix+'-loop-start');
+  const eEl = document.getElementById(prefix+'-loop-end');
+  if (!sEl || !eEl) return;
+  let s = parseInt(sEl.value), e = parseInt(eEl.value);
+  // Ensure start < end
+  if (s >= e) { if (s >= 999) { s = e-1; sEl.value=s; } else { e = s+1; eEl.value=e; } }
+  const dur = engine.getDuration() / engine.getTempoRate();
+  if (!dur) return;
+  const sTime = s/1000 * dur;
+  const eTime = e/1000 * dur;
+  engine.setLoopStartVal(sTime);
+  engine.setLoopEndVal(eTime);
+  updateLoopSliderUI(prefix, engine);
+  // Auto-enable loop
+  if (engine.getLoopStart()>=0 && engine.getLoopEnd()>engine.getLoopStart()) {
+    const lb = document.getElementById(prefix+'-loop-btn');
+    if (lb && !lb.classList.contains('active')) {
+      engine.toggleLoop && engine.toggleLoop();
+    }
+  }
+}
+
+function ensLoopSlider() { loopSlider('ens', ensEngine); }
+function admLoopSlider() { loopSlider('adm', admEngine); }
+
+// Patch clearLoop to reset sliders
+const _origEnsClear = ensEngine.clearLoop?.bind(ensEngine);
+const _origAdmClear = admEngine.clearLoop?.bind(admEngine);
+if (_origEnsClear) ensEngine.clearLoop = function() {
+  _origEnsClear();
+  const s=document.getElementById('ens-loop-start'); if(s)s.value=0;
+  const e=document.getElementById('ens-loop-end');   if(e)e.value=1000;
+  updateLoopSliderUI('ens', ensEngine);
+};
+if (_origAdmClear) admEngine.clearLoop = function() {
+  _origAdmClear();
+  const s=document.getElementById('adm-loop-start'); if(s)s.value=0;
+  const e=document.getElementById('adm-loop-end');   if(e)e.value=1000;
+  updateLoopSliderUI('adm', admEngine);
+};
+
+// ── LOOP DRAG (legacy - kept for compatibility) ───────────────────────────────
 let loopDragState = null;
 
 function startLoopDrag(e, enginePrefix, handle) {
