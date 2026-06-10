@@ -200,11 +200,11 @@
       <div class="card">
         <div class="progress-times"><span id="ens-time-cur">0:00</span><span id="ens-time-tot">0:00</span></div>
         <div class="progress-track" id="ens-progress-track" onclick="ensSeekTo(event)">
-          <div class="loop-region" id="ens-loop-region" style="display:none">
-            <div class="loop-handle loop-handle-start" id="ens-loop-start-handle" onmousedown="startLoopDrag(event,'ens','start')" ontouchstart="startLoopDrag(event,'ens','start')"></div>
-            <div class="loop-handle loop-handle-end" id="ens-loop-end-handle" onmousedown="startLoopDrag(event,'ens','end')" ontouchstart="startLoopDrag(event,'ens','end')"></div>
-          </div>
           <div class="progress-fill" id="ens-progress-fill"></div>
+          <div class="loop-region" id="ens-loop-region" style="display:none">
+            <div class="loop-handle loop-handle-start" id="ens-loop-start-handle"></div>
+            <div class="loop-handle loop-handle-end" id="ens-loop-end-handle"></div>
+          </div>
         </div>
         <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--surface3)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
@@ -326,11 +326,11 @@
       <div class="card">
         <div class="progress-times"><span id="adm-time-cur">0:00</span><span id="adm-time-tot">0:00</span></div>
         <div class="progress-track" id="adm-progress-track" onclick="admSeekTo(event)">
-          <div class="loop-region" id="adm-loop-region" style="display:none">
-            <div class="loop-handle loop-handle-start" id="adm-loop-start-handle" onmousedown="startLoopDrag(event,'adm','start')" ontouchstart="startLoopDrag(event,'adm','start')"></div>
-            <div class="loop-handle loop-handle-end" id="adm-loop-end-handle" onmousedown="startLoopDrag(event,'adm','end')" ontouchstart="startLoopDrag(event,'adm','end')"></div>
-          </div></div>
           <div class="progress-fill" id="adm-progress-fill"></div>
+          <div class="loop-region" id="adm-loop-region" style="display:none">
+            <div class="loop-handle loop-handle-start" id="adm-loop-start-handle"></div>
+            <div class="loop-handle loop-handle-end" id="adm-loop-end-handle"></div>
+          </div>
         </div>
         <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--surface3)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
@@ -396,6 +396,7 @@
         <input type="file" id="adm-notes-upload" accept=".pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf" onchange="admUploadNotes(this)">
         <div id="adm-notes-preview"></div>
       </div>
+    </div>
 
     <!-- ADMINS -->
     <div class="section" id="atab-admins">
