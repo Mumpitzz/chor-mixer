@@ -986,7 +986,7 @@ function renderAdminEnsembles() {
       ${isOwner&&adminAdmins.filter(a=>!a.is_owner).length>0?`
         <div style="display:flex;gap:8px;align-items:center;margin-top:.25rem">
           <select id="assign-${e.id}" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.4rem .7rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none">
-            <option value="">Ensemble zuweisen an…</option>
+            <option value="">— Zuweisung entfernen —</option>
             ${adminAdmins.filter(a=>!a.is_owner).map(a=>`<option value="${a.id}"${a.id===e.admin_id?' selected':''}>${a.name}</option>`).join('')}
           </select>
           <button class="btn btn-accent" style="padding:.4rem .75rem;font-size:.78rem" onclick="assignEnsemble('${e.id}')">Zuweisen</button>
@@ -1032,12 +1032,11 @@ async function deleteEnsemble(id) {
 }
 async function assignEnsemble(ensId) {
   const sel = document.getElementById('assign-'+ensId);
-  const adminId = sel?.value;
-  if(!adminId){toast('Bitte Admin auswählen');return;}
+  const adminId = sel?.value || null;
   const {error} = await sb.from('ensembles').update({admin_id:adminId}).eq('id',ensId);
   if(error){toast('Fehler: '+error.message);return;}
   await adminLoadEnsembles();
-  toast('✓ Ensemble zugewiesen');
+  toast(adminId ? '✓ Ensemble zugewiesen' : '✓ Zuweisung entfernt');
 }
 
 function adminFillFilter() {
