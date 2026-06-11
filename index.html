@@ -308,13 +308,8 @@
 
     <!-- SONGS -->
     <div class="section" id="atab-songs">
-      <div class="card" style="margin-bottom:1rem">
-        <select class="song-select" id="admin-ens-filter" onchange="adminLoadSongs()">
-          <option value="">— Ensemble auswählen —</option>
-        </select>
-      </div>
-      <button class="btn btn-accent btn-full" id="admin-add-song-btn" onclick="showModal('modal-add-song')" style="margin-bottom:1rem;display:none">+ Neues Lied</button>
-      <div id="admin-songs-list"><div class="empty">Bitte Ensemble auswählen</div></div>
+      <button class="btn btn-accent btn-full" onclick="showModal('modal-add-song')" style="margin-bottom:1rem">+ Neues Lied</button>
+      <div id="admin-songs-list"><div class="loading"><div class="spinner"></div>Laden…</div></div>
     </div>
 
     <!-- MIXER (Admin) -->
@@ -839,10 +834,17 @@ const admEngine = makeEngine('adm');
 let ensSong = null;
 
 async function ensInit() {
-  const { data } = await sb.from('songs').select('id,name').eq('ensemble_id', session.ensemble.id).order('created_at');
+  // Load songs via song_ensembles junction table
+  const { data:se } = await sb.from('song_ensembles').select('song_id').eq('ensemble_id', session.ensemble.id);
+  const songIds = (se||[]).map(x=>x.song_id);
+  let songs = [];
+  if (songIds.length) {
+    const { data } = await sb.from('songs').select('id,name').in('id', songIds).order('created_at');
+    songs = data||[];
+  }
   const sel = document.getElementById('ens-song-select');
   sel.innerHTML = '<option value="">— Lied auswählen —</option>' +
-    (data||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    songs.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
 async function loadEnsSong(id) {
@@ -952,7 +954,7 @@ async function adminInit() {
   const adminsTab = document.getElementById('atab-btn-admins');
   if (adminsTab) adminsTab.style.display = session.admin?.is_owner ? 'block' : 'none';
   await Promise.all([adminLoadEnsembles(), adminLoadAdmins()]);
-  adminFillFilter();
+  await adminLoadSongs();
 }
 
 // Ensembles
@@ -968,31 +970,17 @@ async function adminLoadEnsembles() {
 function renderAdminEnsembles() {
   const el = document.getElementById('admin-ensembles-list');
   if (!adminEnsembles.length) { el.innerHTML='<div class="empty">Noch keine Ensembles.</div>'; return; }
-  const isOwner = session.admin?.is_owner;
-  el.innerHTML = adminEnsembles.map(e=>{
-    const owner = adminAdmins.find(a=>a.id===e.admin_id);
-    return `
-    <div class="card" style="margin-bottom:.75rem">
-      <div class="card-row" style="margin-bottom:.5rem">
-        <div>
-          <div style="font-size:.95rem;font-weight:500">${e.name}</div>
-          <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${e.password}</code>${isOwner&&owner?' · Admin: '+owner.name:''}</div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
-          <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
-        </div>
+  el.innerHTML = adminEnsembles.map(e=>`
+    <div class="card card-row" style="margin-bottom:.75rem">
+      <div>
+        <div style="font-size:.95rem;font-weight:500">${e.name}</div>
+        <div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${e.password}</code></div>
       </div>
-      ${isOwner&&adminAdmins.filter(a=>!a.is_owner).length>0?`
-        <div style="display:flex;gap:8px;align-items:center;margin-top:.25rem">
-          <select id="assign-${e.id}" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.4rem .7rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none">
-            <option value="">— Zuweisung entfernen —</option>
-            ${adminAdmins.filter(a=>!a.is_owner).map(a=>`<option value="${a.id}"${a.id===e.admin_id?' selected':''}>${a.name}</option>`).join('')}
-          </select>
-          <button class="btn btn-accent" style="padding:.4rem .75rem;font-size:.78rem" onclick="assignEnsemble('${e.id}')">Zuweisen</button>
-        </div>`:''}
-    </div>`;
-  }).join('');
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-accent" onclick="editEnsemble('${e.id}')">✎</button>
+        <button class="btn btn-danger" onclick="deleteEnsemble('${e.id}')">✕</button>
+      </div>
+    </div>`).join('');
 }
 
 async function addEnsemble() {
@@ -1030,14 +1018,7 @@ async function deleteEnsemble(id) {
   await sb.from('ensembles').delete().eq('id',id);
   await adminLoadEnsembles(); adminFillFilter(); toast('Gelöscht');
 }
-async function assignEnsemble(ensId) {
-  const sel = document.getElementById('assign-'+ensId);
-  const adminId = sel?.value || null;
-  const {error} = await sb.from('ensembles').update({admin_id:adminId}).eq('id',ensId);
-  if(error){toast('Fehler: '+error.message);return;}
-  await adminLoadEnsembles();
-  toast(adminId ? '✓ Ensemble zugewiesen' : '✓ Zuweisung entfernt');
-}
+
 
 function adminFillFilter() {
   const sel=document.getElementById('admin-ens-filter');
@@ -1048,13 +1029,18 @@ function adminFillFilter() {
 
 // Songs
 async function adminLoadSongs() {
-  const ensId=document.getElementById('admin-ens-filter').value;
-  const btn=document.getElementById('admin-add-song-btn');
-  if(!ensId){document.getElementById('admin-songs-list').innerHTML='<div class="empty">Bitte Ensemble auswählen</div>';btn.style.display='none';return;}
-  btn.style.display='block';
   document.getElementById('admin-songs-list').innerHTML='<div class="loading"><div class="spinner"></div>Laden…</div>';
-  const {data}=await sb.from('songs').select('*').eq('ensemble_id',ensId).order('created_at');
-  adminSongs=data||[];
+  // Load all songs visible to this admin
+  let query = sb.from('songs').select('*').order('created_at');
+  if (!session.admin?.is_owner) {
+    // Get ensemble IDs this admin can access
+    const {data:ae} = await sb.from('admin_ensembles').select('ensemble_id').eq('admin_id', session.admin.id);
+    const ensIds = (ae||[]).map(x=>x.ensemble_id);
+    if (!ensIds.length) { document.getElementById('admin-songs-list').innerHTML='<div class="empty">Noch keine Lieder.</div>'; return; }
+    query = query.in('ensemble_id', ensIds);
+  }
+  const {data} = await query;
+  adminSongs = data||[];
   renderAdminSongs();
 }
 
@@ -1062,25 +1048,69 @@ function renderAdminSongs() {
   const el=document.getElementById('admin-songs-list');
   if(!adminSongs.length){el.innerHTML='<div class="empty">Noch keine Lieder.</div>';return;}
   el.innerHTML=adminSongs.map(s=>`
-    <div class="card card-row" style="margin-bottom:.75rem">
-      <div style="font-size:.95rem;font-weight:500">${s.name}</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-accent" onclick="openAdmMixer('${s.id}')">Bearbeiten</button>
-        <button class="btn btn-danger" onclick="deleteSong('${s.id}')">✕</button>
+    <div class="card" style="margin-bottom:.75rem">
+      <div class="card-row" style="margin-bottom:.5rem">
+        <div style="font-size:.95rem;font-weight:500">${s.name}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-accent" onclick="openAdmMixer('${s.id}')">Bearbeiten</button>
+          <button class="btn btn-danger" onclick="deleteSong('${s.id}')">✕</button>
+        </div>
+      </div>
+      <div style="font-size:.75rem;color:var(--text3);margin-bottom:.4rem">Ensembles</div>
+      <div id="song-ens-tags-${s.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.4rem"></div>
+      <div style="display:flex;gap:8px">
+        <select id="song-ens-add-${s.id}" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.35rem .7rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none">
+          <option value="">+ Ensemble zuweisen…</option>
+          ${adminEnsembles.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-accent" style="padding:.35rem .75rem;font-size:.78rem" onclick="addSongEnsemble('${s.id}')">+</button>
       </div>
     </div>`).join('');
+  // Load ensemble tags for each song
+  adminSongs.forEach(s => loadSongEnsembleTags(s.id));
+}
+
+async function loadSongEnsembleTags(songId) {
+  const {data} = await sb.from('song_ensembles').select('ensemble_id').eq('song_id', songId);
+  const el = document.getElementById('song-ens-tags-'+songId);
+  if (!el) return;
+  if (!data?.length) { el.innerHTML='<span style="font-size:.75rem;color:var(--text3)">Keinem Ensemble zugewiesen</span>'; return; }
+  el.innerHTML = data.map(row => {
+    const ens = adminEnsembles.find(e=>e.id===row.ensemble_id);
+    if (!ens) return '';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--accent);border-radius:20px;padding:3px 10px;font-size:.75rem;color:var(--accent2)">
+      ${ens.name}
+      <button onclick="removeSongEnsemble('${songId}','${ens.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:0;line-height:1">✕</button>
+    </span>`;
+  }).join('');
+}
+
+async function addSongEnsemble(songId) {
+  const sel = document.getElementById('song-ens-add-'+songId);
+  const ensId = sel?.value;
+  if (!ensId) return;
+  const {error} = await sb.from('song_ensembles').insert({song_id:songId, ensemble_id:ensId});
+  if (error && !error.message.includes('duplicate')) { toast('Fehler: '+error.message); return; }
+  sel.value='';
+  loadSongEnsembleTags(songId);
+  toast('✓ Ensemble zugewiesen');
+}
+
+async function removeSongEnsemble(songId, ensId) {
+  await sb.from('song_ensembles').delete().eq('song_id',songId).eq('ensemble_id',ensId);
+  loadSongEnsembleTags(songId);
+  toast('Zuweisung entfernt');
 }
 
 async function addSong() {
   const name=document.getElementById('new-song-name').value.trim();
-  const ensId=document.getElementById('admin-ens-filter').value;
-  if(!name||!ensId) return;
-  const {data:song}=await sb.from('songs').insert({name,ensemble_id:ensId}).select().single();
+  if(!name) return;
+  const {data:song}=await sb.from('songs').insert({name}).select().single();
   const voices=Array.from({length:20},(_,i)=>({song_id:song.id,position:i,name:'Stimme '+(i+1),volume:80,muted:false}));
   await sb.from('voices').insert(voices);
   hideModal('modal-add-song');
   document.getElementById('new-song-name').value='';
-  await adminLoadSongs(); toast('✓ Lied erstellt');
+  await adminLoadSongs(); toast('✓ Lied erstellt – jetzt Ensemble zuweisen');
 }
 
 async function deleteSong(id) {
@@ -1285,21 +1315,70 @@ function renderAdminAdmins() {
   const isMe = id => id===session.admin?.id;
   el.innerHTML=adminAdmins.map(a=>`
     <div class="card" style="margin-bottom:.75rem">
-      <div class="card-row" style="margin-bottom:${isOwner&&!isMe(a.id)?'.5rem':'0'}">
+      <div class="card-row" style="margin-bottom:.5rem">
         <div>
-          <div style="font-size:.95rem;font-weight:500">${a.name} ${a.is_owner?'<span style="font-size:.7rem;color:var(--accent2);background:var(--surface3);padding:2px 7px;border-radius:10px">Owner</span>':''} ${isMe(a.id)?'<span style="font-size:.7rem;color:var(--text3)">(Du)</span>':''}</div>
-          ${isMe(a.id)?`<div style="font-size:.75rem;color:var(--text3)">Passwort: <code>${a.password}</code></div>`:''}
+          <div style="font-size:.95rem;font-weight:500;display:flex;align-items:center;gap:6px">
+            ${a.name}
+            ${a.is_owner?'<span style="font-size:.7rem;color:var(--accent2);background:var(--surface3);padding:2px 7px;border-radius:10px">Owner</span>':''}
+            ${isMe(a.id)?'<span style="font-size:.7rem;color:var(--text3)">(Du)</span>':''}
+          </div>
+          ${isMe(a.id)?`<div style="font-size:.75rem;color:var(--text3);margin-top:2px">Passwort: <code>${a.password}</code></div>`:''}
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           ${(isOwner&&!isMe(a.id)&&!a.is_owner)?`<button class="btn btn-danger" onclick="deleteAdmin('${a.id}')">✕</button>`:''}
         </div>
       </div>
       ${(isOwner&&!isMe(a.id)&&!a.is_owner)?`
-        <div style="display:flex;gap:8px;align-items:center;margin-top:.25rem">
-          <input type="text" id="reset-pw-${a.id}" placeholder="Neues Passwort" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.45rem .75rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.8rem;outline:none">
-          <button class="btn btn-accent" style="padding:.45rem .8rem;font-size:.78rem" onclick="resetAdminPw('${a.id}')">Zurücksetzen</button>
+        <div style="margin-top:.25rem">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:.5rem">
+            <input type="text" id="reset-pw-${a.id}" placeholder="Neues Passwort" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.45rem .75rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.8rem;outline:none">
+            <button class="btn btn-accent" style="padding:.45rem .8rem;font-size:.78rem" onclick="resetAdminPw('${a.id}')">Zurücksetzen</button>
+          </div>
+          <div style="font-size:.75rem;color:var(--text3);margin-bottom:.4rem">Ensembles</div>
+          <div id="admin-ens-tags-${a.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.4rem"></div>
+          <div style="display:flex;gap:8px">
+            <select id="admin-ens-add-${a.id}" style="flex:1;background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--radius-sm);padding:.4rem .7rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none">
+              <option value="">+ Ensemble zuweisen…</option>
+              ${adminEnsembles.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+            </select>
+            <button class="btn btn-accent" style="padding:.4rem .75rem;font-size:.78rem" onclick="addAdminEnsemble('${a.id}')">+</button>
+          </div>
         </div>`:''}
     </div>`).join('');
+  // Load ensemble tags for each non-owner admin
+  if(isOwner) adminAdmins.filter(a=>!a.is_owner&&!isMe(a.id)).forEach(a=>loadAdminEnsembleTags(a.id));
+}
+
+async function loadAdminEnsembleTags(adminId) {
+  const {data} = await sb.from('admin_ensembles').select('ensemble_id').eq('admin_id', adminId);
+  const el = document.getElementById('admin-ens-tags-'+adminId);
+  if (!el) return;
+  if (!data?.length) { el.innerHTML='<span style="font-size:.75rem;color:var(--text3)">Keine Ensembles zugewiesen</span>'; return; }
+  el.innerHTML = data.map(row => {
+    const ens = adminEnsembles.find(e=>e.id===row.ensemble_id);
+    if (!ens) return '';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--accent);border-radius:20px;padding:3px 10px;font-size:.75rem;color:var(--accent2)">
+      ${ens.name}
+      <button onclick="removeAdminEnsemble('${adminId}','${ens.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:0;line-height:1">✕</button>
+    </span>`;
+  }).join('');
+}
+
+async function addAdminEnsemble(adminId) {
+  const sel = document.getElementById('admin-ens-add-'+adminId);
+  const ensId = sel?.value;
+  if (!ensId) return;
+  const {error} = await sb.from('admin_ensembles').insert({admin_id:adminId, ensemble_id:ensId}).select();
+  if (error && !error.message.includes('duplicate')) { toast('Fehler: '+error.message); return; }
+  sel.value = '';
+  loadAdminEnsembleTags(adminId);
+  toast('✓ Ensemble zugewiesen');
+}
+
+async function removeAdminEnsemble(adminId, ensId) {
+  await sb.from('admin_ensembles').delete().eq('admin_id',adminId).eq('ensemble_id',ensId);
+  loadAdminEnsembleTags(adminId);
+  toast('Zuweisung entfernt');
 }
 async function addAdmin() {
   const name=document.getElementById('new-admin-name').value.trim();
