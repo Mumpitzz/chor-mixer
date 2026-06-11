@@ -734,7 +734,7 @@ function makeEngine(prefix) {
     // Disconnect old audio nodes
     srcNodes.forEach(s=>{try{s.disconnect();}catch(e){}});
     srcNodes=[];
-    gainNodes.forEach(g=>{try{g.disconnect();}catch(e){}});
+    gainNodes.forEach(g=>{try{if(g.disconnect)g.disconnect();}catch(e){}});
     gainNodes=[];
     audioEls=[];
     ensureCtx();
@@ -1124,7 +1124,7 @@ async function openAdmMixer(songId) {
   admSong=song;
   document.getElementById('adm-song-title').textContent=song.name;
   admEngine.reset(song.voices.length);
-  song.voices.forEach((v,i)=>{admEngine.gainNodes[i].gain.value=v.volume/100;});
+  song.voices.forEach((v,i)=>{admEngine.gainNodes[i].setVolume(v.volume/100);});
   renderAdmTracks();
   song.voices.forEach((v,i)=>{
     if(!v.storage_path) return;
@@ -1218,7 +1218,7 @@ async function admDeleteVoice(i) {
   admSong.voices.splice(i,1);
   admEngine.stop();
   admEngine.reset(admSong.voices.length);
-  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].gain.value=v.volume/100;});
+  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].setVolume(v.volume/100);});
   renderAdmTracks();
   admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme gelöscht');
@@ -1231,7 +1231,7 @@ async function admAddVoice() {
   admSong.voices.push({...v,muted:false,soloed:false});
   admEngine.stop();
   admEngine.reset(admSong.voices.length);
-  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].gain.value=v.volume/100;});
+  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].setVolume(v.volume/100);});
   renderAdmTracks();
   admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme hinzugefügt');
