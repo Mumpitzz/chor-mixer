@@ -775,6 +775,8 @@ function makeEngine(prefix) {
   function isMidiFile(filename) {
     return filename && /\.(mid|midi)$/i.test(filename);
   }
+
+  function recalcDuration() {
     // Only count audio elements that have a valid src and duration
     let max = 0;
     audioEls.forEach(a => {
