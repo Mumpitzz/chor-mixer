@@ -663,17 +663,28 @@ function makeEngine(prefix) {
       a.mozPreservesPitch=true;
       a.webkitPreservesPitch=true;
     });
-    // MIDI files – set tempo directly on player
-    midiPlayers.forEach(p=>{
+    // MIDI files – adjust tempo via player
+    midiPlayers.forEach((p,i)=>{
       if(!p)return;
-      try{ p.setTempo(p.tempo * tempoRate); }catch(e){}
+      try{
+        const baseBpm = midiBaseTempo[i] || 120;
+        p.setTempo(baseBpm * tempoRate);
+      }catch(e){}
     });
   }
 
   function setPitchInternal(semitones){
     pitchSemitones = semitones;
-    // Audio files – use playbackRate (slight pitch change is unavoidable here)
-    // MIDI files – pitch is handled in the midiEvent handler via note offset
+    // For MIDI: need to restart players so new pitch takes effect immediately
+    if (midiPlayers.some(p=>p)) {
+      const wasPlaying = playing;
+      if (wasPlaying) {
+        // Get current position
+        const midiP = midiPlayers.find(p=>p?.isPlaying());
+        // Stop and restart - pitch change applies to new notes
+        midiPlayers.forEach(p=>{ try{ if(p?.isPlaying()){ p.stop(); p.play(); } }catch(e){} });
+      }
+    }
   }
 
   let loopStart = -1;
@@ -752,7 +763,7 @@ function makeEngine(prefix) {
     const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
     // Clear MIDI players
     midiPlayers.forEach(p=>{try{p?.stop();}catch(e){}});
-    midiPlayers=[]; midiInstruments=[]; isMidi=[];
+    midiPlayers=[]; midiInstruments=[]; isMidi=[]; midiBaseTempo=[];
     // Revoke old object URLs
     Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
     buffers={};
@@ -785,6 +796,7 @@ function makeEngine(prefix) {
   let midiPlayers = []; // MidiPlayer.Player per voice (if MIDI file)
   let midiInstruments = []; // Soundfont instrument per voice
   let isMidi = []; // boolean per voice
+  let midiBaseTempo = []; // original BPM per voice
 
   function isMidiFile(filename) {
     return filename && /\.(mid|midi)$/i.test(filename);
@@ -852,6 +864,9 @@ function makeEngine(prefix) {
       const bpm = player.tempo || 120;
       const tpb = player.division || 480;
       const dur = (totalTicks / tpb) * (60 / bpm);
+      // Store base tempo for later tempo adjustments
+      if (!midiBaseTempo) midiBaseTempo = [];
+      midiBaseTempo[i] = bpm;
       if (dur > duration) {
         duration = dur;
         const tt = el('-time-tot'); if (tt) tt.textContent = fmt(duration / tempoRate);
@@ -868,7 +883,7 @@ function makeEngine(prefix) {
           const noteName = noteNames[noteNum % 12] + octave;
           midiInstruments[i].play(noteName, actx.currentTime, {
             gain: vol * (ev.velocity / 127),
-            duration: 3.5  // longer duration = more legato, choral feel
+            duration: 0.8  // short enough to avoid muddiness
           });
         }
       });
