@@ -9,8 +9,6 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/midi-player-js@2.0.16/browser/midiplayer.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -553,30 +551,57 @@ function logoutEnsemble() { ensEngine.stop(); showScreen('screen-login'); }
 function logoutAdmin()    { admEngine.stop(); showScreen('screen-login'); }
 
 // ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
-// Uses HTML5 Audio elements with preservesPitch for reliable tempo change
-// without pitch shift - works natively in Chrome, Safari, Firefox
 function makeEngine(prefix) {
-  let audioEls = [];   // HTMLAudioElement per voice
-  let gainNodes = [];  // GainNode per voice (for volume/mute)
-  let srcNodes = [];   // MediaElementSourceNode per voice
-  let actx = null;
-  let buffers = {};    // objectURL per voice index
-  let playing = false;
-  let looping = false;
+  let audioEls  = [];
+  let gainNodes = [];
+  let srcNodes  = [];
+  let buffers   = {};
+  let playing   = false;
+  let looping   = false;
   let tempoRate = 1.0;
-  let duration = 0;
-  let ticker = null;
+  let duration  = 0;
+  let startOffset = 0;
+  let ticker    = null;
+  let loopStart = -1;
+  let loopEnd   = -1;
 
   function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
   function el(id){return document.getElementById(prefix+id);}
+  function ensureCtx(){/* audio elements don't need AudioContext */}
 
-  function ensureCtx(){
-    if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
+  function recalcDuration(){
+    let max=0;
+    audioEls.forEach(a=>{if(a&&a.src&&a.duration&&isFinite(a.duration))max=Math.max(max,a.duration);});
+    duration=max;
+    const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+  }
+
+  function reset(n){
+    stop();
+    duration=0;
+    const tt=el('-time-tot');if(tt)tt.textContent='0:00';
+    const tc=el('-time-cur');if(tc)tc.textContent='0:00';
+    Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
+    buffers={};
+    gainNodes=[];
+    audioEls=[];
+    for(let i=0;i<n;i++){
+      const a=new Audio();
+      a.crossOrigin='anonymous';
+      a.volume=0.8;
+      a.preload='auto';
+      audioEls[i]=a;
+      gainNodes[i]={
+        _vol:0.8, _muted:false, _el:a,
+        _applyVol(){ if(this._el) this._el.volume=this._muted?0:Math.max(0,Math.min(1,this._vol)); },
+        setVolume(v){ this._vol=v; this._applyVol(); },
+        setMuted(m){ this._muted=m; this._applyVol(); }
+      };
+    }
   }
 
   function stop(){
     audioEls.forEach(a=>{try{a.pause();a.currentTime=0;}catch(e){}});
-    midiPlayers.forEach(p=>{try{p?.stop();}catch(e){}});
     clearInterval(ticker);
     playing=false; startOffset=0;
     const pf=el('-progress-fill');if(pf)pf.style.width='0%';
@@ -587,29 +612,21 @@ function makeEngine(prefix) {
   function pause(){
     if(!playing)return;
     audioEls.forEach(a=>{try{a.pause();}catch(e){}});
-    midiPlayers.forEach(p=>{try{if(p?.isPlaying())p.pause();}catch(e){}});
     clearInterval(ticker);
     playing=false;
     const pb=el('-play-btn');if(pb)pb.textContent='▶';
   }
 
   function play(){
-    ensureCtx();
-    if(actx.state==='suspended')actx.resume();
-    const hasAudio=audioEls.some(a=>a&&a.src&&!isMidi[audioEls.indexOf(a)]);
-    const hasMidi=midiPlayers.some(p=>p);
-    if(!hasAudio&&!hasMidi){toast('Keine Audiodateien geladen');return;}
-
-    audioEls.forEach((a,i)=>{
-      if(!a||!a.src||isMidi[i])return;
+    if(!audioEls.some(a=>a&&a.src)){toast('Keine Audiodateien geladen');return;}
+    audioEls.forEach(a=>{
+      if(!a||!a.src)return;
       a.playbackRate=tempoRate;
       a.preservesPitch=true;
       a.mozPreservesPitch=true;
       a.webkitPreservesPitch=true;
       a.play().catch(e=>console.warn('play error',e));
     });
-    midiPlayers.forEach(p=>{try{if(p)p.play();}catch(e){}});
-
     playing=true;
     const pb=el('-play-btn');if(pb)pb.textContent='⏸';
     ticker=setInterval(tick,100);
@@ -617,45 +634,34 @@ function makeEngine(prefix) {
 
   function tick(){
     if(!playing||!duration)return;
-    const a=audioEls.find((x,i)=>x&&x.src&&!x.paused&&!isMidi[i]);
-    const midiP=midiPlayers.find(p=>p?.isPlaying());
-    if(!a&&!midiP)return;
-    const elapsed=a?a.currentTime:(midiP?midiP.getSongTime():0);
+    const a=audioEls.find(x=>x&&x.src&&!x.paused);
+    if(!a)return;
+    const elapsed=a.currentTime;
     const total=duration/tempoRate;
-    // Loop region check
     if(looping&&loopStart>=0&&loopEnd>loopStart){
-      if(elapsed>=loopEnd){
-        audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});
-        return;
-      }
+      if(elapsed>=loopEnd){audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});return;}
     } else if(elapsed>=total-0.1){
-      if(looping){
-        audioEls.forEach(x=>{if(x)x.currentTime=0;});
-      } else { stop(); return; }
+      if(looping){audioEls.forEach(x=>{if(x)x.currentTime=0;});}
+      else{stop();return;}
     }
     const pf=el('-progress-fill');if(pf)pf.style.width=(elapsed/total*100)+'%';
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
   }
 
   function seek(e){
-    ensureCtx();
     const track=el('-progress-track');if(!track)return;
     const rect=track.getBoundingClientRect();
     const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    const total=duration/tempoRate;
-    const pos=pct*total;
+    const pos=pct*duration/tempoRate;
     audioEls.forEach(a=>{if(a&&a.src)a.currentTime=pos;});
     const pf=el('-progress-fill');if(pf)pf.style.width=(pct*100)+'%';
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(pos);
   }
 
-  let pitchSemitones = 0; // for MIDI transposition
-
   function setTempo(val){
     tempoRate=val/100;
     const tv=el('-tempo-val');if(tv)tv.textContent=val+'%';
     const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
-    // Audio files
     audioEls.forEach(a=>{
       if(!a||!a.src)return;
       a.playbackRate=tempoRate;
@@ -663,269 +669,91 @@ function makeEngine(prefix) {
       a.mozPreservesPitch=true;
       a.webkitPreservesPitch=true;
     });
-    // MIDI files – adjust tempo via player
-    midiPlayers.forEach((p,i)=>{
-      if(!p)return;
-      try{
-        const baseBpm = midiBaseTempo[i] || 120;
-        p.setTempo(baseBpm * tempoRate);
-      }catch(e){}
-    });
   }
 
-  function setPitchInternal(semitones){
-    pitchSemitones = semitones;
-    // For MIDI: need to restart players so new pitch takes effect immediately
-    if (midiPlayers.some(p=>p)) {
-      const wasPlaying = playing;
-      if (wasPlaying) {
-        // Get current position
-        const midiP = midiPlayers.find(p=>p?.isPlaying());
-        // Stop and restart - pitch change applies to new notes
-        midiPlayers.forEach(p=>{ try{ if(p?.isPlaying()){ p.stop(); p.play(); } }catch(e){} });
-      }
-    }
+  function toggleLoop(){
+    looping=!looping;
+    const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
+    toast(looping?'🔁 Loop aktiv':'Loop deaktiviert');
   }
 
-  let loopStart = -1;
-  let loopEnd = -1;
-
-  function setLoopPoint(e){
-    const track=el('-progress-track');if(!track)return;
-    e.preventDefault();
-    const rect=track.getBoundingClientRect();
-    const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    const pos=pct*duration/tempoRate;
-    if(loopStart<0||loopEnd>=0){
-      // Set start
-      loopStart=pos; loopEnd=-1;
-      toast('Loop-Start gesetzt – rechtsklick für Ende');
-    } else {
-      // Set end
-      if(pos<=loopStart){ toast('Ende muss nach Start liegen'); return; }
-      loopEnd=pos;
-      updateLoopRegion();
-      if(!looping){ looping=true; const lb=el('-loop-btn');if(lb)lb.classList.add('active'); }
-      toast('🔁 Loop: '+fmt(loopStart)+' – '+fmt(loopEnd));
-    }
-  }
+  function setLoopPoint(e){/* kept for compatibility */}
 
   function updateLoopRegion(){
     const region=el('-loop-region');
-    const info=el('-loop-info');
     const label=el('-loop-label');
+    const fill=el('-loop-fill');
+    const hsEl=el('-lh-start');
+    const heEl=el('-lh-end');
     if(!region)return;
     if(loopStart>=0&&loopEnd>loopStart&&duration>0){
       const totalDur=duration/tempoRate;
       const leftPct=loopStart/totalDur*100;
       const widthPct=(loopEnd-loopStart)/totalDur*100;
-      region.style.left=leftPct+'%';
-      region.style.width=widthPct+'%';
-      region.style.display='block';
-      if(info)info.style.display='flex';
-      if(label)label.textContent='Loop: '+fmt(loopStart)+' – '+fmt(loopEnd);
+      region.style.left=leftPct+'%'; region.style.width=widthPct+'%'; region.style.display='block';
+      if(fill){fill.style.left=leftPct+'%';fill.style.width=widthPct+'%';}
+      if(hsEl)hsEl.style.left=leftPct+'%';
+      if(heEl)heEl.style.left=(leftPct+widthPct)+'%';
+      if(label)label.textContent=fmt(loopStart)+' – '+fmt(loopEnd);
     } else {
       region.style.display='none';
-      if(info)info.style.display='none';
+      if(fill){fill.style.left='0%';fill.style.width='100%';}
+      if(hsEl)hsEl.style.left='0%';
+      if(heEl)heEl.style.left='100%';
+      if(label)label.textContent='—';
     }
   }
 
-  function setLoopStartVal(pos){ loopStart=Math.max(0,Math.min(pos,loopEnd>0?loopEnd-0.1:duration/tempoRate)); updateLoopRegion(); }
-  function setLoopEndVal(pos){ loopEnd=Math.max(loopStart>=0?loopStart+0.1:0.1,Math.min(pos,duration/tempoRate)); updateLoopRegion(); }
-  function getLoopStart(){ return loopStart; }
-  function getLoopEnd(){ return loopEnd; }
-  function getDuration(){ return duration; }
-  function getTempoRate(){ return tempoRate; }
+  function setLoopStartVal(pos){loopStart=Math.max(0,Math.min(pos,loopEnd>0?loopEnd-0.1:duration/tempoRate));updateLoopRegion();}
+  function setLoopEndVal(pos){loopEnd=Math.max(loopStart>=0?loopStart+0.1:0.1,Math.min(pos,duration/tempoRate));updateLoopRegion();}
+  function getLoopStart(){return loopStart;}
+  function getLoopEnd(){return loopEnd;}
+  function getDuration(){return duration;}
+  function getTempoRate(){return tempoRate;}
 
   function clearLoop(){
-    loopStart=-1; loopEnd=-1;
-    looping=false;
+    loopStart=-1;loopEnd=-1;looping=false;
     const lb=el('-loop-btn');if(lb)lb.classList.remove('active');
     updateLoopRegion();
     toast('Loop gelöscht');
   }
 
-  function toggleLoop(){
-    if(loopStart>=0&&loopEnd>loopStart){
-      looping=!looping;
-      const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
-      toast(looping?'🔁 Loop aktiv':'Loop pausiert');
-    } else {
-      toast('Rechtsklick auf Fortschrittsbalken: Start → Ende setzen');
-    }
+  async function loadFromUrl(i,path){
+    if(!audioEls[i])return false;
+    try{
+      const res=await fetch(pubUrl(path));
+      if(!res.ok)throw new Error();
+      const blob=await res.blob();
+      return loadFromBlob(i,blob);
+    }catch(e){return false;}
   }
 
-  function reset(n){
-    stop();
-    // Reset duration for new song
-    duration = 0;
-    const tt=el('-time-tot'); if(tt) tt.textContent='0:00';
-    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
-    // Clear MIDI players
-    midiPlayers.forEach(p=>{try{p?.stop();}catch(e){}});
-    midiPlayers=[]; midiInstruments=[]; isMidi=[]; midiBaseTempo=[];
-    // Revoke old object URLs
-    Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
-    buffers={};
-    // Disconnect old audio nodes
-    srcNodes.forEach(s=>{try{s.disconnect();}catch(e){}});
-    srcNodes=[];
-    gainNodes.forEach(g=>{try{if(g.disconnect)g.disconnect();}catch(e){}});
-    gainNodes=[];
-    audioEls=[];
-    ensureCtx();
-    for(let i=0;i<n;i++){
-      const a=new Audio();
-      a.crossOrigin='anonymous';
-      a.volume=0.8;
-      a.preload='auto';
-      audioEls[i]=a;
-      // Use a simple volume wrapper object instead of Web Audio API
-      // This avoids createMediaElementSource issues in Safari/Firefox
-      gainNodes[i]={ _vol:0.8, _muted:false, _el:a,
-        set gain(v){ this._vol=typeof v==='object'?v.value:v; this._applyVol(); },
-        get gain(){ return { value:this._vol, set value(v){ this._vol=v; this._applyVol(); } }; },
-        _applyVol(){ if(this._el) this._el.volume=this._muted?0:Math.max(0,Math.min(1,this._vol)); },
-        setVolume(v){ this._vol=v; this._applyVol(); },
-        setMuted(m){ this._muted=m; this._applyVol(); }
-      };
-    }
-  }
-
-  // MIDI support
-  let midiPlayers = []; // MidiPlayer.Player per voice (if MIDI file)
-  let midiInstruments = []; // Soundfont instrument per voice
-  let isMidi = []; // boolean per voice
-  let midiBaseTempo = []; // original BPM per voice
-
-  function isMidiFile(filename) {
-    return filename && /\.(mid|midi)$/i.test(filename);
-  }
-
-  function recalcDuration() {
-    // Only count audio elements that have a valid src and duration
-    let max = 0;
-    audioEls.forEach(a => {
-      if (a && a.src && a.duration && isFinite(a.duration)) {
-        max = Math.max(max, a.duration);
-      }
-    });
-    duration = max;
-    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
-  }
-  async function loadFromUrl(i, path) {
-    if (isMidiFile(path)) return loadMidiFromUrl(i, path);
-    if (!audioEls[i]) return false;
-    try {
-      const res = await fetch(pubUrl(path));
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      if (buffers[i]) URL.revokeObjectURL(buffers[i]);
-      buffers[i] = url;
-      audioEls[i].src = url;
-      await new Promise(resolve => {
-        audioEls[i].onloadedmetadata = () => resolve();
-        audioEls[i].onerror = () => resolve();
-        setTimeout(resolve, 3000);
+  async function loadFromBlob(i,blob){
+    if(!audioEls[i])return false;
+    try{
+      const url=URL.createObjectURL(blob);
+      if(buffers[i])URL.revokeObjectURL(buffers[i]);
+      buffers[i]=url;
+      audioEls[i].src=url;
+      await new Promise(resolve=>{
+        audioEls[i].onloadedmetadata=()=>resolve();
+        audioEls[i].onerror=()=>resolve();
+        setTimeout(resolve,3000);
       });
       recalcDuration();
       return true;
-    } catch(e) { return false; }
-  }
-
-  async function loadMidiFromUrl(i, path) {
-    try {
-      const res = await fetch(pubUrl(path));
-      if (!res.ok) throw new Error();
-      const ab = await res.arrayBuffer();
-      return loadMidiBuffer(i, ab);
-    } catch(e) { return false; }
-  }
-
-  async function loadMidiBuffer(i, ab) {
-    try {
-      ensureCtx();
-      // Choose instrument based on voice name for more realistic sound
-      const vName = (admSong?.voices?.[i]?.name || ensSong?.voices?.[i]?.name || '').toLowerCase();
-      let instrument_name = 'choir_aahs'; // default
-      if (vName.includes('sopran') || vName.includes('alt')) {
-        instrument_name = 'choir_aahs'; // bright, higher voices
-      } else if (vName.includes('tenor') || vName.includes('bariton') || vName.includes('bass')) {
-        instrument_name = 'voice_oohs'; // warmer, lower voices
-      }
-      const instrument = await Soundfont.instrument(actx, instrument_name, { soundfont: 'MusyngKite' });
-      midiInstruments[i] = instrument;
-      isMidi[i] = true;
-      const player = new MidiPlayer.Player();
-      player.loadArrayBuffer(ab);
-      // Estimate duration
-      const totalTicks = player.getTotalTicks();
-      const bpm = player.tempo || 120;
-      const tpb = player.division || 480;
-      const dur = (totalTicks / tpb) * (60 / bpm);
-      // Store base tempo for later tempo adjustments
-      if (!midiBaseTempo) midiBaseTempo = [];
-      midiBaseTempo[i] = bpm;
-      if (dur > duration) {
-        duration = dur;
-        const tt = el('-time-tot'); if (tt) tt.textContent = fmt(duration / tempoRate);
-      }
-      player.on('midiEvent', ev => {
-        if (!midiInstruments[i]) return;
-        const vol = gainNodes[i]?._muted ? 0 : (gainNodes[i]?._vol ?? 0.8);
-        if (ev.name === 'Note on' && ev.velocity > 0) {
-          // Apply pitch transposition by shifting note number
-          const noteNum = ev.noteNumber + pitchSemitones;
-          if (noteNum < 0 || noteNum > 127) return; // out of range
-          const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-          const octave = Math.floor(noteNum / 12) - 1;
-          const noteName = noteNames[noteNum % 12] + octave;
-          midiInstruments[i].play(noteName, actx.currentTime, {
-            gain: vol * (ev.velocity / 127),
-            duration: 0.8  // short enough to avoid muddiness
-          });
-        }
-      });
-      midiPlayers[i] = player;
-      return true;
-    } catch(e) { console.error('MIDI load error', e); return false; }
-  }
-
-  async function loadFromBlob(i, blob) {
-    // Check if it's a MIDI file by reading magic bytes
-    const header = await blob.slice(0, 4).arrayBuffer();
-    const magic = new Uint8Array(header);
-    const isMidiBlob = magic[0]===0x4D && magic[1]===0x54 && magic[2]===0x68 && magic[3]===0x64; // "MThd"
-    if (isMidiBlob) {
-      const ab = await blob.arrayBuffer();
-      return loadMidiBuffer(i, ab);
-    }
-    if (!audioEls[i]) return false;
-    try {
-      const url = URL.createObjectURL(blob);
-      if (buffers[i]) URL.revokeObjectURL(buffers[i]);
-      buffers[i] = url;
-      audioEls[i].src = url;
-      await new Promise(resolve => {
-        audioEls[i].onloadedmetadata = () => resolve();
-        audioEls[i].onerror = () => resolve();
-        setTimeout(resolve, 3000);
-      });
-      recalcDuration();
-      return true;
-    } catch(e) { return false; }
+    }catch(e){return false;}
   }
 
   return {
     stop, pause, play,
     togglePlay:()=>{if(playing)pause();else play();},
     skipBack:()=>stop(),
-    seek, setTempo, setPitchInternal, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
+    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
     setLoopStartVal, setLoopEndVal, getLoopStart, getLoopEnd, getDuration, getTempoRate,
     reset, loadFromUrl, loadFromBlob,
-    _getAudioEls: ()=>audioEls,
-    _getFirstAudio: ()=>audioEls.find(a=>a&&a.src),
+    _getAudioEls:()=>audioEls,
+    _getFirstAudio:()=>audioEls.find(a=>a&&a.src),
     get playing(){return playing;},
     get gainNodes(){return gainNodes;},
     get _audioEls(){return audioEls;},
@@ -1275,7 +1103,7 @@ function renderAdmTracks() {
       <div class="file-row">
         <span class="file-status" id="adm-fs-${i}">${v.storage_path?'✓':'—'}</span>
         <label class="file-label-btn" for="adm-fi-${i}">MP3 laden</label>
-        <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,.mid,.midi,audio/*" onchange="admUploadAudio(${i},this)">
+        <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,audio/*" onchange="admUploadAudio(${i},this)">
       </div>
       <div class="vol-row">
         <span style="font-size:.8rem;color:var(--text3)">🔈</span>
@@ -1573,19 +1401,15 @@ function admToggleMetronome() { toggleMetronome('adm'); }
 function setPitch(prefix, semitones) {
   document.getElementById(prefix+'-pitch-val').textContent = (semitones > 0 ? '+' : '') + semitones + ' HT';
   const engine = prefix === 'ens' ? ensEngine : admEngine;
-  // Use internal pitch method that handles both audio and MIDI
-  engine.setPitchInternal(semitones);
-  // For audio files also apply via playbackRate (best effort)
-  if (engine._audioEls) {
-    const rate = Math.pow(2, semitones/12);
-    engine._audioEls().forEach(a => {
-      if (!a || !a.src) return;
-      a.preservesPitch = false;
-      a.mozPreservesPitch = false;
-      a.webkitPreservesPitch = false;
-      a.playbackRate = rate * (engine.getTempoRate ? engine.getTempoRate() : 1.0);
-    });
-  }
+  const rate = Math.pow(2, semitones/12);
+  const tempo = engine.getTempoRate ? engine.getTempoRate() : 1.0;
+  engine._getAudioEls().forEach(a => {
+    if (!a || !a.src) return;
+    a.preservesPitch = false;
+    a.mozPreservesPitch = false;
+    a.webkitPreservesPitch = false;
+    a.playbackRate = rate * tempo;
+  });
 }
 function ensSetPitch(v) { setPitch('ens', parseInt(v)); }
 function admSetPitch(v) { setPitch('adm', parseInt(v)); }
