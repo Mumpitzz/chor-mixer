@@ -562,133 +562,218 @@ function logoutEnsemble() { ensEngine.stop(); showScreen('screen-login'); }
 function logoutAdmin()    { admEngine.stop(); showScreen('screen-login'); }
 
 // ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
+// Uses Web Audio API with AudioBufferSourceNode for perfect sync on iOS Safari
 function makeEngine(prefix) {
-  let audioEls  = [];
-  let gainNodes = [];
-  let srcNodes  = [];
-  let buffers   = {};
+  let actx      = null;
+  let gainNodes = [];   // GainNode[] per voice
+  let bufs      = [];   // AudioBuffer[] per voice (decoded PCM)
+  let srcNodes  = [];   // AudioBufferSourceNode[] per voice (active playback)
   let playing   = false;
   let looping   = false;
   let tempoRate = 1.0;
+  let pitchRate = 1.0;  // combined playbackRate = tempoRate * pitchRate
   let duration  = 0;
-  let startOffset = 0;
+  let pauseOffset = 0;  // seconds into track when paused
+  let playStartAt = 0;  // actx.currentTime when play started
   let ticker    = null;
   let loopStart = -1;
   let loopEnd   = -1;
 
   function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
   function el(id){return document.getElementById(prefix+id);}
-  function ensureCtx(){/* audio elements don't need AudioContext */}
+
+  function ensureCtx(){
+    if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+  }
 
   function recalcDuration(){
-    let max=0;
-    audioEls.forEach(a=>{if(a&&a.src&&a.duration&&isFinite(a.duration))max=Math.max(max,a.duration);});
-    duration=max;
-    const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+    duration = bufs.reduce((m,b)=>b?Math.max(m,b.duration):m, 0);
+    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
   }
 
   function reset(n){
-    stop();
-    duration=0;
-    const tt=el('-time-tot');if(tt)tt.textContent='0:00';
-    const tc=el('-time-cur');if(tc)tc.textContent='0:00';
-    Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
-    buffers={};
-    gainNodes=[];
-    audioEls=[];
+    stopAll(); playOff();
+    gainNodes.forEach(g=>{try{g.disconnect();}catch(e){}});
+    gainNodes=[]; bufs=new Array(n).fill(null); srcNodes=[];
+    duration=0; pauseOffset=0;
+    const tt=el('-time-tot'); if(tt) tt.textContent='0:00';
+    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
+    ensureCtx();
     for(let i=0;i<n;i++){
-      const a=new Audio();
-      a.crossOrigin='anonymous';
-      a.volume=0.8;
-      a.preload='auto';
-      audioEls[i]=a;
-      gainNodes[i]={
-        _vol:0.8, _muted:false, _el:a,
-        _applyVol(){ if(this._el) this._el.volume=this._muted?0:Math.max(0,Math.min(1,this._vol)); },
-        setVolume(v){ this._vol=v; this._applyVol(); },
-        setMuted(m){ this._muted=m; this._applyVol(); }
-      };
+      const g=actx.createGain();
+      g.gain.value=0.8;
+      g.connect(actx.destination);
+      gainNodes[i]=g;
     }
   }
 
-  function stop(){
-    audioEls.forEach(a=>{try{a.pause();a.currentTime=0;}catch(e){}});
-    clearInterval(ticker);
-    playing=false; startOffset=0;
-    const pf=el('-progress-fill');if(pf)pf.style.width='0%';
-    const tc=el('-time-cur');if(tc)tc.textContent='0:00';
-    const pb=el('-play-btn');if(pb)pb.textContent='▶';
+  // ── VOLUME / MUTE / SOLO ──
+  function setVolume(i, vol){
+    if(gainNodes[i]) gainNodes[i].gain.setTargetAtTime(vol, actx.currentTime, 0.01);
+  }
+  function setMuted(i, muted, vol){
+    if(gainNodes[i]) gainNodes[i].gain.setTargetAtTime(muted?0:vol, actx.currentTime, 0.01);
   }
 
-  function pause(){
-    if(!playing)return;
-    audioEls.forEach(a=>{try{a.pause();}catch(e){}});
-    clearInterval(ticker);
+  // ── TRANSPORT ──
+  function stopSrcs(){
+    srcNodes.forEach(s=>{try{s?.stop();}catch(e){}});
+    srcNodes=[]; clearInterval(ticker);
+  }
+  function stopAll(){
+    stopSrcs(); pauseOffset=0;
+    const pf=el('-progress-fill'); if(pf) pf.style.width='0%';
+    const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
+  }
+  function playOff(){
     playing=false;
-    const pb=el('-play-btn');if(pb)pb.textContent='▶';
+    const pb=el('-play-btn'); if(pb) pb.textContent='▶';
   }
 
-  function play(){
-    if(!audioEls.some(a=>a&&a.src)){toast('Keine Audiodateien geladen');return;}
-    audioEls.forEach(a=>{
-      if(!a||!a.src)return;
-      a.playbackRate=tempoRate;
-      a.preservesPitch=true;
-      a.mozPreservesPitch=true;
-      a.webkitPreservesPitch=true;
-      a.play().catch(e=>console.warn('play error',e));
+  function playAll(){
+    ensureCtx();
+    if(!bufs.some(b=>b)){toast('Keine Audiodateien geladen');return;}
+    stopSrcs();
+    const rate = tempoRate * pitchRate;
+    const now  = actx.currentTime;
+    playStartAt = now - pauseOffset / rate;
+
+    bufs.forEach((buf,i)=>{
+      if(!buf) return;
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      src.connect(gainNodes[i]||actx.destination);
+      src.start(now, pauseOffset);
+      srcNodes[i] = src;
     });
+
     playing=true;
-    const pb=el('-play-btn');if(pb)pb.textContent='⏸';
-    ticker=setInterval(tick,100);
+    const pb=el('-play-btn'); if(pb) pb.textContent='⏸';
+    ticker=setInterval(tick, 80);
+  }
+
+  function pauseAll(){
+    const rate = tempoRate * pitchRate;
+    pauseOffset = Math.min((actx.currentTime - playStartAt) * rate, duration);
+    stopSrcs(); playOff();
   }
 
   function tick(){
-    if(!playing||!duration)return;
-    const a=audioEls.find(x=>x&&x.src&&!x.paused);
-    if(!a)return;
-    const elapsed=a.currentTime;
-    const total=duration/tempoRate;
-    if(looping&&loopStart>=0&&loopEnd>loopStart){
-      if(elapsed>=loopEnd){audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});return;}
-    } else if(elapsed>=total-0.1){
-      if(looping){audioEls.forEach(x=>{if(x)x.currentTime=0;});}
-      else{stop();return;}
+    if(!playing||!duration) return;
+    const rate = tempoRate * pitchRate;
+    const elapsed = (actx.currentTime - playStartAt) * rate;
+
+    // Loop region
+    if(looping && loopStart>=0 && loopEnd>loopStart){
+      if(elapsed >= loopEnd){
+        pauseOffset = loopStart;
+        stopSrcs();
+        const now = actx.currentTime;
+        playStartAt = now - pauseOffset / rate;
+        bufs.forEach((buf,i)=>{
+          if(!buf) return;
+          const src=actx.createBufferSource();
+          src.buffer=buf; src.playbackRate.value=rate;
+          src.connect(gainNodes[i]||actx.destination);
+          src.start(now, pauseOffset);
+          srcNodes[i]=src;
+        });
+        ticker=setInterval(tick,80);
+        return;
+      }
+    } else if(elapsed >= duration){
+      if(looping){ pauseOffset=0; stopSrcs(); playAll(); }
+      else { stopAll(); playOff(); }
+      return;
     }
-    const pf=el('-progress-fill');if(pf)pf.style.width=(elapsed/total*100)+'%';
-    const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
+
+    const total = duration / rate;
+    const pf=el('-progress-fill'); if(pf) pf.style.width=(elapsed/duration*100)+'%';
+    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(elapsed);
   }
 
   function seek(e){
-    const track=el('-progress-track');if(!track)return;
+    ensureCtx();
+    const track=el('-progress-track'); if(!track) return;
     const rect=track.getBoundingClientRect();
     const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    const pos=pct*duration/tempoRate;
-    audioEls.forEach(a=>{if(a&&a.src)a.currentTime=pos;});
-    const pf=el('-progress-fill');if(pf)pf.style.width=(pct*100)+'%';
-    const tc=el('-time-cur');if(tc)tc.textContent=fmt(pos);
+    pauseOffset = pct * duration;
+    const pf=el('-progress-fill'); if(pf) pf.style.width=(pct*100)+'%';
+    const tc=el('-time-cur'); if(tc) tc.textContent=fmt(pauseOffset);
+    if(playing){
+      stopSrcs(); clearInterval(ticker);
+      const rate = tempoRate * pitchRate;
+      const now  = actx.currentTime;
+      playStartAt = now - pauseOffset / rate;
+      bufs.forEach((buf,i)=>{
+        if(!buf) return;
+        const src=actx.createBufferSource();
+        src.buffer=buf; src.playbackRate.value=rate;
+        src.connect(gainNodes[i]||actx.destination);
+        src.start(now, pauseOffset);
+        srcNodes[i]=src;
+      });
+      ticker=setInterval(tick,80);
+    }
   }
 
   function setTempo(val){
-    tempoRate=val/100;
-    const tv=el('-tempo-val');if(tv)tv.textContent=val+'%';
-    const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
-    audioEls.forEach(a=>{
-      if(!a||!a.src)return;
-      a.playbackRate=tempoRate;
-      a.preservesPitch=true;
-      a.mozPreservesPitch=true;
-      a.webkitPreservesPitch=true;
-    });
+    const wasPlaying = playing;
+    const pos = playing ? (actx.currentTime-playStartAt)*(tempoRate*pitchRate) : pauseOffset;
+    if(wasPlaying){ stopSrcs(); clearInterval(ticker); playing=false; }
+    tempoRate = val/100;
+    const tv=el('-tempo-val'); if(tv) tv.textContent=val+'%';
+    const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+    pauseOffset = Math.min(pos, duration);
+    if(wasPlaying){
+      const rate = tempoRate * pitchRate;
+      const now  = actx.currentTime;
+      playStartAt = now - pauseOffset / rate;
+      bufs.forEach((buf,i)=>{
+        if(!buf) return;
+        const src=actx.createBufferSource();
+        src.buffer=buf; src.playbackRate.value=rate;
+        src.connect(gainNodes[i]||actx.destination);
+        src.start(now, pauseOffset);
+        srcNodes[i]=src;
+      });
+      playing=true;
+      const pb=el('-play-btn'); if(pb) pb.textContent='⏸';
+      ticker=setInterval(tick,80);
+    }
+  }
+
+  function setPitch(semitones){
+    const wasPlaying = playing;
+    const pos = playing ? (actx.currentTime-playStartAt)*(tempoRate*pitchRate) : pauseOffset;
+    if(wasPlaying){ stopSrcs(); clearInterval(ticker); playing=false; }
+    pitchRate = Math.pow(2, semitones/12);
+    pauseOffset = Math.min(pos, duration);
+    if(wasPlaying){
+      const rate = tempoRate * pitchRate;
+      const now  = actx.currentTime;
+      playStartAt = now - pauseOffset / rate;
+      bufs.forEach((buf,i)=>{
+        if(!buf) return;
+        const src=actx.createBufferSource();
+        src.buffer=buf; src.playbackRate.value=rate;
+        src.connect(gainNodes[i]||actx.destination);
+        src.start(now, pauseOffset);
+        srcNodes[i]=src;
+      });
+      playing=true;
+      const pb=el('-play-btn'); if(pb) pb.textContent='⏸';
+      ticker=setInterval(tick,80);
+    }
   }
 
   function toggleLoop(){
     looping=!looping;
-    const lb=el('-loop-btn');if(lb)lb.classList.toggle('active',looping);
+    const lb=el('-loop-btn'); if(lb) lb.classList.toggle('active',looping);
     toast(looping?'🔁 Loop aktiv':'Loop deaktiviert');
   }
-
-  function setLoopPoint(e){/* kept for compatibility */}
 
   function updateLoopRegion(){
     const region=el('-loop-region');
@@ -696,81 +781,90 @@ function makeEngine(prefix) {
     const fill=el('-loop-fill');
     const hsEl=el('-lh-start');
     const heEl=el('-lh-end');
-    if(!region)return;
-    if(loopStart>=0&&loopEnd>loopStart&&duration>0){
-      const totalDur=duration/tempoRate;
-      const leftPct=loopStart/totalDur*100;
-      const widthPct=(loopEnd-loopStart)/totalDur*100;
+    if(!region) return;
+    if(loopStart>=0 && loopEnd>loopStart && duration>0){
+      const totalDur = duration/tempoRate;
+      const leftPct  = loopStart/totalDur*100;
+      const widthPct = (loopEnd-loopStart)/totalDur*100;
       region.style.left=leftPct+'%'; region.style.width=widthPct+'%'; region.style.display='block';
-      if(fill){fill.style.left=leftPct+'%';fill.style.width=widthPct+'%';}
-      if(hsEl)hsEl.style.left=leftPct+'%';
-      if(heEl)heEl.style.left=(leftPct+widthPct)+'%';
-      if(label)label.textContent=fmt(loopStart)+' – '+fmt(loopEnd);
+      if(fill){ fill.style.left=leftPct+'%'; fill.style.width=widthPct+'%'; }
+      if(hsEl) hsEl.style.left=leftPct+'%';
+      if(heEl) heEl.style.left=(leftPct+widthPct)+'%';
+      if(label) label.textContent=fmt(loopStart)+' – '+fmt(loopEnd);
     } else {
       region.style.display='none';
-      if(fill){fill.style.left='0%';fill.style.width='100%';}
-      if(hsEl)hsEl.style.left='0%';
-      if(heEl)heEl.style.left='100%';
-      if(label)label.textContent='—';
+      if(fill){ fill.style.left='0%'; fill.style.width='100%'; }
+      if(hsEl) hsEl.style.left='0%';
+      if(heEl) heEl.style.left='100%';
+      if(label) label.textContent='—';
     }
   }
 
-  function setLoopStartVal(pos){loopStart=Math.max(0,Math.min(pos,loopEnd>0?loopEnd-0.1:duration/tempoRate));updateLoopRegion();}
-  function setLoopEndVal(pos){loopEnd=Math.max(loopStart>=0?loopStart+0.1:0.1,Math.min(pos,duration/tempoRate));updateLoopRegion();}
-  function getLoopStart(){return loopStart;}
-  function getLoopEnd(){return loopEnd;}
-  function getDuration(){return duration;}
-  function getTempoRate(){return tempoRate;}
-
   function clearLoop(){
-    loopStart=-1;loopEnd=-1;looping=false;
-    const lb=el('-loop-btn');if(lb)lb.classList.remove('active');
-    updateLoopRegion();
-    toast('Loop gelöscht');
+    loopStart=-1; loopEnd=-1; looping=false;
+    const lb=el('-loop-btn'); if(lb) lb.classList.remove('active');
+    updateLoopRegion(); toast('Loop gelöscht');
   }
 
-  async function loadFromUrl(i,path){
-    if(!audioEls[i])return false;
+  function setLoopStartVal(pos){ loopStart=Math.max(0,Math.min(pos,loopEnd>0?loopEnd-0.1:duration/tempoRate)); updateLoopRegion(); }
+  function setLoopEndVal(pos){ loopEnd=Math.max(loopStart>=0?loopStart+0.1:0.1,Math.min(pos,duration/tempoRate)); updateLoopRegion(); }
+  function getLoopStart(){ return loopStart; }
+  function getLoopEnd(){ return loopEnd; }
+  function getDuration(){ return duration; }
+  function getTempoRate(){ return tempoRate; }
+  function setLoopPoint(){}  // kept for compat
+
+  // ── LOAD AUDIO ──
+  async function loadFromUrl(i, path){
+    ensureCtx();
     try{
-      const res=await fetch(pubUrl(path));
-      if(!res.ok)throw new Error();
-      const blob=await res.blob();
-      return loadFromBlob(i,blob);
-    }catch(e){return false;}
+      const res = await fetch(pubUrl(path));
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const ab  = await res.arrayBuffer();
+      return _decode(i, ab);
+    }catch(e){ return false; }
   }
 
-  async function loadFromBlob(i,blob){
-    if(!audioEls[i])return false;
+  async function loadFromBlob(i, blob){
+    ensureCtx();
     try{
-      const url=URL.createObjectURL(blob);
-      if(buffers[i])URL.revokeObjectURL(buffers[i]);
-      buffers[i]=url;
-      audioEls[i].src=url;
-      await new Promise(resolve=>{
-        audioEls[i].onloadedmetadata=()=>resolve();
-        audioEls[i].onerror=()=>resolve();
-        setTimeout(resolve,3000);
-      });
+      const ab = await blob.arrayBuffer();
+      return _decode(i, ab);
+    }catch(e){ return false; }
+  }
+
+  async function _decode(i, ab){
+    try{
+      const buf = await actx.decodeAudioData(ab);
+      bufs[i] = buf;
       recalcDuration();
       return true;
-    }catch(e){return false;}
+    }catch(e){ return false; }
   }
 
   return {
-    stop, pause, play,
-    togglePlay:()=>{if(playing)pause();else play();},
-    skipBack:()=>stop(),
-    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
-    setLoopStartVal, setLoopEndVal, getLoopStart, getLoopEnd, getDuration, getTempoRate,
+    // Transport
+    stop(){ stopAll(); playOff(); },
+    pause(){ pauseAll(); },
+    play(){ playAll(); },
+    togglePlay(){ if(playing) pauseAll(); else playAll(); },
+    skipBack(){ stopAll(); playOff(); },
+    seek, setTempo, setPitch, toggleLoop,
+    setLoopPoint, clearLoop, updateLoopRegion,
+    setLoopStartVal, setLoopEndVal,
+    getLoopStart, getLoopEnd, getDuration, getTempoRate,
+    // Volume
+    setVolume, setMuted,
+    // Load
     reset, loadFromUrl, loadFromBlob,
-    _getAudioEls:()=>audioEls,
-    _getFirstAudio:()=>audioEls.find(a=>a&&a.src),
-    get playing(){return playing;},
-    get gainNodes(){return gainNodes;},
-    get _audioEls(){return audioEls;},
+    // Compat accessors
+    _getAudioEls(){ return []; },
+    get playing(){ return playing; },
+    get gainNodes(){ return gainNodes; },
   };
 }
 
+const ensEngine = makeEngine('ens');
 const ensEngine = makeEngine('ens');
 
 
@@ -802,7 +896,7 @@ async function loadEnsSong(id) {
   song.voices = (voices||[]).map(v=>({...v,muted:false,soloed:false}));
   ensSong = song;
   ensEngine.reset(song.voices.length);
-  song.voices.forEach((v,i) => { ensEngine.gainNodes[i].setVolume(v.volume/100); });
+  song.voices.forEach((v,i) => { ensEngine.setVolume(i, v.volume/100); });
   renderEnsTracks();
   song.voices.forEach((v,i) => {
     if (!v.storage_path) return;
@@ -849,14 +943,14 @@ function ensSetVol(i,val) {
   if(!ensSong) return;
   ensSong.voices[i].volume=+val;
   document.getElementById('ens-vp-'+i).textContent=val+'%';
-  if(ensEngine.gainNodes[i]&&!ensSong.voices[i].muted) ensEngine.gainNodes[i].setVolume(val/100);
+  ensEngine.setVolume(i, ensSong.voices[i].muted ? 0 : val/100);
 }
 function ensToggleMute(i) {
   if(!ensSong) return;
   ensSong.voices[i].muted=!ensSong.voices[i].muted;
   document.getElementById('ens-tc-'+i).classList.toggle('muted',ensSong.voices[i].muted);
   document.getElementById('ens-mb-'+i).classList.toggle('mute-active',ensSong.voices[i].muted);
-  ensEngine.gainNodes[i].setMuted(ensSong.voices[i].muted); ensEngine.gainNodes[i].setVolume(ensSong.voices[i].volume/100);
+  ensEngine.setMuted(i, ensSong.voices[i].muted, ensSong.voices[i].volume/100);
 }
 function ensToggleSolo(i) {
   if(!ensSong) return;
@@ -873,7 +967,7 @@ function ensToggleSolo(i) {
   }
   const anySolo=ensSong.voices.some(v=>v.soloed);
   ensSong.voices.forEach((v,j)=>{
-    if(ensEngine.gainNodes[j]){ ensEngine.gainNodes[j].setMuted(anySolo?!v.soloed:v.muted); ensEngine.gainNodes[j].setVolume(v.volume/100); }
+    ensEngine.setMuted(j, anySolo?!v.soloed:v.muted, v.volume/100);
   });
 }
 function ensTogglePlay(){ensEngine.togglePlay();}
@@ -1077,7 +1171,7 @@ async function openAdmMixer(songId) {
   admSong=song;
   document.getElementById('adm-song-title').textContent=song.name;
   admEngine.reset(song.voices.length);
-  song.voices.forEach((v,i)=>{admEngine.gainNodes[i].setVolume(v.volume/100);});
+  song.voices.forEach((v,i)=>{admEngine.setVolume(i, v.volume/100);});
   renderAdmTracks();
   song.voices.forEach((v,i)=>{
     if(!v.storage_path) return;
@@ -1136,7 +1230,7 @@ function admSetVol(i,val) {
   if(!admSong) return;
   admSong.voices[i].volume=+val;
   document.getElementById('adm-vp-'+i).textContent=val+'%';
-  if(admEngine.gainNodes[i]&&!admSong.voices[i].muted) admEngine.gainNodes[i].setVolume(val/100);
+  admEngine.setVolume(i, admSong.voices[i].muted ? 0 : val/100);
   sb.from('voices').update({volume:+val}).eq('id',admSong.voices[i].id);
 }
 function admToggleMute(i) {
@@ -1144,7 +1238,7 @@ function admToggleMute(i) {
   admSong.voices[i].muted=!admSong.voices[i].muted;
   document.getElementById('adm-tc-'+i).classList.toggle('muted',admSong.voices[i].muted);
   document.getElementById('adm-mb-'+i).classList.toggle('mute-active',admSong.voices[i].muted);
-  admEngine.gainNodes[i].setMuted(admSong.voices[i].muted); admEngine.gainNodes[i].setVolume(admSong.voices[i].volume/100);
+  admEngine.setMuted(i, admSong.voices[i].muted, admSong.voices[i].volume/100);
 }
 function admToggleSolo(i) {
   if(!admSong) return;
@@ -1161,7 +1255,7 @@ function admToggleSolo(i) {
   }
   const anySolo=admSong.voices.some(v=>v.soloed);
   admSong.voices.forEach((v,j)=>{
-    if(admEngine.gainNodes[j]){ admEngine.gainNodes[j].setMuted(anySolo?!v.soloed:v.muted); admEngine.gainNodes[j].setVolume(v.volume/100); }
+    admEngine.setMuted(j, anySolo?!v.soloed:v.muted, v.volume/100);
   });
 }
 async function admDeleteVoice(i) {
@@ -1171,7 +1265,7 @@ async function admDeleteVoice(i) {
   admSong.voices.splice(i,1);
   admEngine.stop();
   admEngine.reset(admSong.voices.length);
-  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].setVolume(v.volume/100);});
+  admSong.voices.forEach((v,j)=>{admEngine.setVolume(j,v.volume/100);});
   renderAdmTracks();
   admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme gelöscht');
@@ -1184,7 +1278,7 @@ async function admAddVoice() {
   admSong.voices.push({...v,muted:false,soloed:false});
   admEngine.stop();
   admEngine.reset(admSong.voices.length);
-  admSong.voices.forEach((v,j)=>{admEngine.gainNodes[j].setVolume(v.volume/100);});
+  admSong.voices.forEach((v,j)=>{admEngine.setVolume(j,v.volume/100);});
   renderAdmTracks();
   admSong.voices.forEach((v,j)=>{if(v.storage_path)admEngine.loadFromUrl(j,v.storage_path);});
   toast('Stimme hinzugefügt');
@@ -1413,15 +1507,7 @@ function admToggleMetronome() { toggleMetronome('adm'); }
 function setPitch(prefix, semitones) {
   document.getElementById(prefix+'-pitch-val').textContent = (semitones > 0 ? '+' : '') + semitones + ' HT';
   const engine = prefix === 'ens' ? ensEngine : admEngine;
-  const rate = Math.pow(2, semitones/12);
-  const tempo = engine.getTempoRate ? engine.getTempoRate() : 1.0;
-  engine._getAudioEls().forEach(a => {
-    if (!a || !a.src) return;
-    a.preservesPitch = false;
-    a.mozPreservesPitch = false;
-    a.webkitPreservesPitch = false;
-    a.playbackRate = rate * tempo;
-  });
+  engine.setPitch(semitones);
 }
 function ensSetPitch(v) { setPitch('ens', parseInt(v)); }
 function admSetPitch(v) { setPitch('adm', parseInt(v)); }
