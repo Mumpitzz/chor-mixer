@@ -649,10 +649,13 @@ function makeEngine(prefix) {
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(pos);
   }
 
+  let pitchSemitones = 0; // for MIDI transposition
+
   function setTempo(val){
     tempoRate=val/100;
     const tv=el('-tempo-val');if(tv)tv.textContent=val+'%';
     const tt=el('-time-tot');if(tt)tt.textContent=fmt(duration/tempoRate);
+    // Audio files
     audioEls.forEach(a=>{
       if(!a||!a.src)return;
       a.playbackRate=tempoRate;
@@ -660,6 +663,17 @@ function makeEngine(prefix) {
       a.mozPreservesPitch=true;
       a.webkitPreservesPitch=true;
     });
+    // MIDI files – set tempo directly on player
+    midiPlayers.forEach(p=>{
+      if(!p)return;
+      try{ p.setTempo(p.tempo * tempoRate); }catch(e){}
+    });
+  }
+
+  function setPitchInternal(semitones){
+    pitchSemitones = semitones;
+    // Audio files – use playbackRate (slight pitch change is unavoidable here)
+    // MIDI files – pitch is handled in the midiEvent handler via note offset
   }
 
   let loopStart = -1;
@@ -820,7 +834,15 @@ function makeEngine(prefix) {
   async function loadMidiBuffer(i, ab) {
     try {
       ensureCtx();
-      const instrument = await Soundfont.instrument(actx, 'acoustic_grand_piano', { soundfont: 'MusyngKite' });
+      // Choose instrument based on voice name for more realistic sound
+      const vName = (admSong?.voices?.[i]?.name || ensSong?.voices?.[i]?.name || '').toLowerCase();
+      let instrument_name = 'choir_aahs'; // default
+      if (vName.includes('sopran') || vName.includes('alt')) {
+        instrument_name = 'choir_aahs'; // bright, higher voices
+      } else if (vName.includes('tenor') || vName.includes('bariton') || vName.includes('bass')) {
+        instrument_name = 'voice_oohs'; // warmer, lower voices
+      }
+      const instrument = await Soundfont.instrument(actx, instrument_name, { soundfont: 'MusyngKite' });
       midiInstruments[i] = instrument;
       isMidi[i] = true;
       const player = new MidiPlayer.Player();
@@ -838,7 +860,16 @@ function makeEngine(prefix) {
         if (!midiInstruments[i]) return;
         const vol = gainNodes[i]?._muted ? 0 : (gainNodes[i]?._vol ?? 0.8);
         if (ev.name === 'Note on' && ev.velocity > 0) {
-          midiInstruments[i].play(ev.noteName, actx.currentTime, { gain: vol * (ev.velocity / 127), duration: 2 });
+          // Apply pitch transposition by shifting note number
+          const noteNum = ev.noteNumber + pitchSemitones;
+          if (noteNum < 0 || noteNum > 127) return; // out of range
+          const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+          const octave = Math.floor(noteNum / 12) - 1;
+          const noteName = noteNames[noteNum % 12] + octave;
+          midiInstruments[i].play(noteName, actx.currentTime, {
+            gain: vol * (ev.velocity / 127),
+            duration: 3.5  // longer duration = more legato, choral feel
+          });
         }
       });
       midiPlayers[i] = player;
@@ -875,7 +906,7 @@ function makeEngine(prefix) {
     stop, pause, play,
     togglePlay:()=>{if(playing)pause();else play();},
     skipBack:()=>stop(),
-    seek, setTempo, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
+    seek, setTempo, setPitchInternal, toggleLoop, setLoopPoint, clearLoop, updateLoopRegion,
     setLoopStartVal, setLoopEndVal, getLoopStart, getLoopEnd, getDuration, getTempoRate,
     reset, loadFromUrl, loadFromBlob,
     _getAudioEls: ()=>audioEls,
@@ -1527,7 +1558,19 @@ function admToggleMetronome() { toggleMetronome('adm'); }
 function setPitch(prefix, semitones) {
   document.getElementById(prefix+'-pitch-val').textContent = (semitones > 0 ? '+' : '') + semitones + ' HT';
   const engine = prefix === 'ens' ? ensEngine : admEngine;
-  engine.setPitch(semitones);
+  // Use internal pitch method that handles both audio and MIDI
+  engine.setPitchInternal(semitones);
+  // For audio files also apply via playbackRate (best effort)
+  if (engine._audioEls) {
+    const rate = Math.pow(2, semitones/12);
+    engine._audioEls().forEach(a => {
+      if (!a || !a.src) return;
+      a.preservesPitch = false;
+      a.mozPreservesPitch = false;
+      a.webkitPreservesPitch = false;
+      a.playbackRate = rate * (engine.getTempoRate ? engine.getTempoRate() : 1.0);
+    });
+  }
 }
 function ensSetPitch(v) { setPitch('ens', parseInt(v)); }
 function admSetPitch(v) { setPitch('adm', parseInt(v)); }
@@ -1681,29 +1724,7 @@ openAdmMixer = async function(songId) {
   renderAdmMarkers();
 };
 
-// ── PITCH IN ENGINE ───────────────────────────────────────────────────────────
-// Add pitch shift via playbackRate compensation on audio elements
-// We extend both engines with a setPitch method
-[ensEngine, admEngine].forEach(engine => {
-  let pitchSemitones = 0;
-  engine.setPitch = function(semitones) {
-    pitchSemitones = semitones;
-    const rate = Math.pow(2, semitones/12);
-    // Apply to all audio elements - combine with tempo
-    const tempoRate = engine.getTempoRate ? engine.getTempoRate() : 1.0;
-    // We set playbackRate to tempo*pitch, preservesPitch handles the rest
-    // But pitch shift without tempo change: we need to temporarily bypass preservesPitch
-    if (engine._audioEls) {
-      engine._audioEls.forEach(a => {
-        if (!a || !a.src) return;
-        a.preservesPitch = false;
-        a.mozPreservesPitch = false;
-        a.webkitPreservesPitch = false;
-        a.playbackRate = rate;
-      });
-    }
-  };
-});
+
 
 // ── SQL HINT FOR ANNOUNCEMENTS ────────────────────────────────────────────────
 // SQL needed: CREATE TABLE announcements (id uuid primary key default gen_random_uuid(), ensemble_id uuid references ensembles(id) on delete cascade, text text not null, admin_name text, created_at timestamp default now()); + RLS policies
