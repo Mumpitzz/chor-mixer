@@ -578,6 +578,8 @@ function makeEngine(prefix) {
   let ticker    = null;
   let loopStart = -1;
   let loopEnd   = -1;
+  let _voiceCount = 0;
+  let _volumes = [];
 
   function fmt(s){const m=Math.floor(Math.max(0,s)/60),sc=Math.floor(Math.max(0,s)%60);return m+':'+(sc<10?'0':'')+sc;}
   function el(id){return document.getElementById(prefix+id);}
@@ -599,10 +601,18 @@ function makeEngine(prefix) {
     duration=0; pauseOffset=0;
     const tt=el('-time-tot'); if(tt) tt.textContent='0:00';
     const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
+    // Store voice count, create GainNodes lazily on first play
+    _voiceCount = n;
+  }
+
+  function _ensureGainNodes(){
     ensureCtx();
-    for(let i=0;i<n;i++){
+    if(gainNodes.length === _voiceCount) return;
+    gainNodes.forEach(g=>{try{g.disconnect();}catch(e){}});
+    gainNodes=[];
+    for(let i=0;i<_voiceCount;i++){
       const g=actx.createGain();
-      g.gain.value=0.8;
+      g.gain.value=_volumes[i]||0.8;
       g.connect(actx.destination);
       gainNodes[i]=g;
     }
@@ -610,10 +620,13 @@ function makeEngine(prefix) {
 
   // ── VOLUME / MUTE / SOLO ──
   function setVolume(i, vol){
-    if(gainNodes[i]) gainNodes[i].gain.setTargetAtTime(vol, actx.currentTime, 0.01);
+    _volumes[i] = vol;
+    if(gainNodes[i] && actx) gainNodes[i].gain.setTargetAtTime(vol, actx.currentTime, 0.01);
   }
   function setMuted(i, muted, vol){
-    if(gainNodes[i]) gainNodes[i].gain.setTargetAtTime(muted?0:vol, actx.currentTime, 0.01);
+    _volumes[i] = muted ? 0 : (vol||_volumes[i]||0.8);
+    if(gainNodes[i] && actx) gainNodes[i].gain.setTargetAtTime(muted?0:vol, actx.currentTime, 0.01);
+    else _volumes[i] = muted ? 0 : vol;
   }
 
   // ── TRANSPORT ──
@@ -631,8 +644,10 @@ function makeEngine(prefix) {
     const pb=el('-play-btn'); if(pb) pb.textContent='▶';
   }
 
-  function playAll(){
-    ensureCtx();
+  async function playAll(){
+    _ensureGainNodes();
+    // Decode any pending raw buffers (iOS: first time after user gesture)
+    await _decodeAllPending();
     if(!bufs.some(b=>b)){toast('Keine Audiodateien geladen');return;}
     stopSrcs();
     const rate = tempoRate * pitchRate;
@@ -815,31 +830,54 @@ function makeEngine(prefix) {
   function setLoopPoint(){}  // kept for compat
 
   // ── LOAD AUDIO ──
+  // Store raw ArrayBuffers so we can decode after user gesture (iOS requirement)
+  let _rawBufs = [];
+
   async function loadFromUrl(i, path){
-    ensureCtx();
     try{
       const res = await fetch(pubUrl(path));
       if(!res.ok) throw new Error('HTTP '+res.status);
       const ab  = await res.arrayBuffer();
-      return _decode(i, ab);
+      return _storeAndDecode(i, ab);
     }catch(e){ return false; }
   }
 
   async function loadFromBlob(i, blob){
-    ensureCtx();
     try{
       const ab = await blob.arrayBuffer();
-      return _decode(i, ab);
+      return _storeAndDecode(i, ab);
     }catch(e){ return false; }
+  }
+
+  async function _storeAndDecode(i, ab){
+    _rawBufs[i] = ab;
+    // Try to decode now if AudioContext already exists (desktop)
+    if(actx && actx.state !== 'suspended'){
+      return _decode(i, ab);
+    }
+    // On iOS: estimate duration from file size for display
+    // Will decode on first play
+    const estimatedDuration = ab.byteLength / (128000/8); // assume 128kbps
+    if(estimatedDuration > duration){
+      duration = estimatedDuration;
+      const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
+    }
+    return true;
   }
 
   async function _decode(i, ab){
     try{
-      const buf = await actx.decodeAudioData(ab);
+      const buf = await actx.decodeAudioData(ab.slice(0));
       bufs[i] = buf;
       recalcDuration();
       return true;
-    }catch(e){ return false; }
+    }catch(e){ console.error('decode error',e); return false; }
+  }
+
+  async function _decodeAllPending(){
+    const pending = _rawBufs.map((ab,i) => ab && !bufs[i] ? {ab,i} : null).filter(Boolean);
+    if(!pending.length) return;
+    await Promise.all(pending.map(({ab,i}) => _decode(i,ab)));
   }
 
   return {
@@ -847,7 +885,7 @@ function makeEngine(prefix) {
     stop(){ stopAll(); playOff(); },
     pause(){ pauseAll(); },
     play(){ playAll(); },
-    togglePlay(){ if(playing) pauseAll(); else playAll(); },
+    togglePlay(){ if(playing) pauseAll(); else playAll(); }, // playAll is async, fire-and-forget
     skipBack(){ stopAll(); playOff(); },
     seek, setTempo, setPitch, toggleLoop,
     setLoopPoint, clearLoop, updateLoopRegion,
