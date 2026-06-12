@@ -9,6 +9,8 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/midi-player-js@2.0.16/browser/midiplayer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -574,8 +576,9 @@ function makeEngine(prefix) {
 
   function stop(){
     audioEls.forEach(a=>{try{a.pause();a.currentTime=0;}catch(e){}});
+    midiPlayers.forEach(p=>{try{p?.stop();}catch(e){}});
     clearInterval(ticker);
-    playing=false;
+    playing=false; startOffset=0;
     const pf=el('-progress-fill');if(pf)pf.style.width='0%';
     const tc=el('-time-cur');if(tc)tc.textContent='0:00';
     const pb=el('-play-btn');if(pb)pb.textContent='▶';
@@ -584,6 +587,7 @@ function makeEngine(prefix) {
   function pause(){
     if(!playing)return;
     audioEls.forEach(a=>{try{a.pause();}catch(e){}});
+    midiPlayers.forEach(p=>{try{if(p?.isPlaying())p.pause();}catch(e){}});
     clearInterval(ticker);
     playing=false;
     const pb=el('-play-btn');if(pb)pb.textContent='▶';
@@ -592,16 +596,19 @@ function makeEngine(prefix) {
   function play(){
     ensureCtx();
     if(actx.state==='suspended')actx.resume();
-    if(!audioEls.some(a=>a&&a.src)){toast('Keine Audiodateien geladen');return;}
+    const hasAudio=audioEls.some(a=>a&&a.src&&!isMidi[audioEls.indexOf(a)]);
+    const hasMidi=midiPlayers.some(p=>p);
+    if(!hasAudio&&!hasMidi){toast('Keine Audiodateien geladen');return;}
 
-    audioEls.forEach(a=>{
-      if(!a||!a.src)return;
-      a.playbackRate = tempoRate;
-      a.preservesPitch = true;
-      a.mozPreservesPitch = true;
-      a.webkitPreservesPitch = true;
+    audioEls.forEach((a,i)=>{
+      if(!a||!a.src||isMidi[i])return;
+      a.playbackRate=tempoRate;
+      a.preservesPitch=true;
+      a.mozPreservesPitch=true;
+      a.webkitPreservesPitch=true;
       a.play().catch(e=>console.warn('play error',e));
     });
+    midiPlayers.forEach(p=>{try{if(p)p.play();}catch(e){}});
 
     playing=true;
     const pb=el('-play-btn');if(pb)pb.textContent='⏸';
@@ -610,9 +617,10 @@ function makeEngine(prefix) {
 
   function tick(){
     if(!playing||!duration)return;
-    const a=audioEls.find(x=>x&&x.src&&!x.paused);
-    if(!a)return;
-    const elapsed=a.currentTime;
+    const a=audioEls.find((x,i)=>x&&x.src&&!x.paused&&!isMidi[i]);
+    const midiP=midiPlayers.find(p=>p?.isPlaying());
+    if(!a&&!midiP)return;
+    const elapsed=a?a.currentTime:(midiP?midiP.getSongTime():0);
     const total=duration/tempoRate;
     // Loop region check
     if(looping&&loopStart>=0&&loopEnd>loopStart){
@@ -728,6 +736,9 @@ function makeEngine(prefix) {
     duration = 0;
     const tt=el('-time-tot'); if(tt) tt.textContent='0:00';
     const tc=el('-time-cur'); if(tc) tc.textContent='0:00';
+    // Clear MIDI players
+    midiPlayers.forEach(p=>{try{p?.stop();}catch(e){}});
+    midiPlayers=[]; midiInstruments=[]; isMidi=[];
     // Revoke old object URLs
     Object.values(buffers).forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
     buffers={};
@@ -756,7 +767,14 @@ function makeEngine(prefix) {
     }
   }
 
-  function recalcDuration() {
+  // MIDI support
+  let midiPlayers = []; // MidiPlayer.Player per voice (if MIDI file)
+  let midiInstruments = []; // Soundfont instrument per voice
+  let isMidi = []; // boolean per voice
+
+  function isMidiFile(filename) {
+    return filename && /\.(mid|midi)$/i.test(filename);
+  }
     // Only count audio elements that have a valid src and duration
     let max = 0;
     audioEls.forEach(a => {
@@ -767,41 +785,88 @@ function makeEngine(prefix) {
     duration = max;
     const tt=el('-time-tot'); if(tt) tt.textContent=fmt(duration/tempoRate);
   }
-  async function loadFromUrl(i,path){
-    if(!audioEls[i])return false;
-    try{
-      const res=await fetch(pubUrl(path));
-      if(!res.ok)throw new Error();
-      const blob=await res.blob();
-      const url=URL.createObjectURL(blob);
-      if(buffers[i])URL.revokeObjectURL(buffers[i]);
-      buffers[i]=url;
-      audioEls[i].src=url;
-      await new Promise((resolve)=>{
-        audioEls[i].onloadedmetadata=()=>resolve();
-        audioEls[i].onerror=()=>resolve();
-        setTimeout(resolve,3000);
+  async function loadFromUrl(i, path) {
+    if (isMidiFile(path)) return loadMidiFromUrl(i, path);
+    if (!audioEls[i]) return false;
+    try {
+      const res = await fetch(pubUrl(path));
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (buffers[i]) URL.revokeObjectURL(buffers[i]);
+      buffers[i] = url;
+      audioEls[i].src = url;
+      await new Promise(resolve => {
+        audioEls[i].onloadedmetadata = () => resolve();
+        audioEls[i].onerror = () => resolve();
+        setTimeout(resolve, 3000);
       });
       recalcDuration();
       return true;
-    }catch(e){return false;}
+    } catch(e) { return false; }
   }
 
-  async function loadFromBlob(i,blob){
-    if(!audioEls[i])return false;
-    try{
-      const url=URL.createObjectURL(blob);
-      if(buffers[i])URL.revokeObjectURL(buffers[i]);
-      buffers[i]=url;
-      audioEls[i].src=url;
-      await new Promise((resolve)=>{
-        audioEls[i].onloadedmetadata=()=>resolve();
-        audioEls[i].onerror=()=>resolve();
-        setTimeout(resolve,3000);
+  async function loadMidiFromUrl(i, path) {
+    try {
+      const res = await fetch(pubUrl(path));
+      if (!res.ok) throw new Error();
+      const ab = await res.arrayBuffer();
+      return loadMidiBuffer(i, ab);
+    } catch(e) { return false; }
+  }
+
+  async function loadMidiBuffer(i, ab) {
+    try {
+      ensureCtx();
+      const instrument = await Soundfont.instrument(actx, 'acoustic_grand_piano', { soundfont: 'MusyngKite' });
+      midiInstruments[i] = instrument;
+      isMidi[i] = true;
+      const player = new MidiPlayer.Player();
+      player.loadArrayBuffer(ab);
+      // Estimate duration
+      const totalTicks = player.getTotalTicks();
+      const bpm = player.tempo || 120;
+      const tpb = player.division || 480;
+      const dur = (totalTicks / tpb) * (60 / bpm);
+      if (dur > duration) {
+        duration = dur;
+        const tt = el('-time-tot'); if (tt) tt.textContent = fmt(duration / tempoRate);
+      }
+      player.on('midiEvent', ev => {
+        if (!midiInstruments[i]) return;
+        const vol = gainNodes[i]?._muted ? 0 : (gainNodes[i]?._vol ?? 0.8);
+        if (ev.name === 'Note on' && ev.velocity > 0) {
+          midiInstruments[i].play(ev.noteName, actx.currentTime, { gain: vol * (ev.velocity / 127), duration: 2 });
+        }
+      });
+      midiPlayers[i] = player;
+      return true;
+    } catch(e) { console.error('MIDI load error', e); return false; }
+  }
+
+  async function loadFromBlob(i, blob) {
+    // Check if it's a MIDI file by reading magic bytes
+    const header = await blob.slice(0, 4).arrayBuffer();
+    const magic = new Uint8Array(header);
+    const isMidiBlob = magic[0]===0x4D && magic[1]===0x54 && magic[2]===0x68 && magic[3]===0x64; // "MThd"
+    if (isMidiBlob) {
+      const ab = await blob.arrayBuffer();
+      return loadMidiBuffer(i, ab);
+    }
+    if (!audioEls[i]) return false;
+    try {
+      const url = URL.createObjectURL(blob);
+      if (buffers[i]) URL.revokeObjectURL(buffers[i]);
+      buffers[i] = url;
+      audioEls[i].src = url;
+      await new Promise(resolve => {
+        audioEls[i].onloadedmetadata = () => resolve();
+        audioEls[i].onerror = () => resolve();
+        setTimeout(resolve, 3000);
       });
       recalcDuration();
       return true;
-    }catch(e){return false;}
+    } catch(e) { return false; }
   }
 
   return {
@@ -1162,7 +1227,7 @@ function renderAdmTracks() {
       <div class="file-row">
         <span class="file-status" id="adm-fs-${i}">${v.storage_path?'✓':'—'}</span>
         <label class="file-label-btn" for="adm-fi-${i}">MP3 laden</label>
-        <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,audio/*" onchange="admUploadAudio(${i},this)">
+        <input type="file" id="adm-fi-${i}" accept=".mp3,.m4a,.wav,.aac,.mid,.midi,audio/*" onchange="admUploadAudio(${i},this)">
       </div>
       <div class="vol-row">
         <span style="font-size:.8rem;color:var(--text3)">🔈</span>
