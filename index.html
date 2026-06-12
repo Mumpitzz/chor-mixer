@@ -9,6 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root {
       --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#252540;--surface3:#2e2e50;
@@ -304,6 +305,16 @@
     <!-- SONGS -->
     <div class="section" id="atab-songs">
       <button class="btn btn-accent btn-full" onclick="showModal('modal-add-song')" style="margin-bottom:1rem">+ Neues Lied</button>
+      <!-- Drag & Drop Import Zone -->
+      <div id="import-dropzone"
+           style="border:2px dashed var(--surface3);border-radius:var(--radius);padding:1.5rem;text-align:center;margin-bottom:1rem;transition:border-color .2s,background .2s;cursor:pointer"
+           ondragover="importDragOver(event)" ondragleave="importDragLeave(event)" ondrop="importDrop(event)"
+           onclick="document.getElementById('import-file-input').click()">
+        <div style="font-size:1.5rem;margin-bottom:.4rem">📦</div>
+        <div style="font-size:.85rem;color:var(--text3)">Lied-ZIP hier ablegen oder klicken zum Importieren</div>
+        <div id="import-status" style="font-size:.78rem;color:var(--accent2);margin-top:.4rem"></div>
+      </div>
+      <input type="file" id="import-file-input" accept=".zip" style="display:none" onchange="importFromFile(this)">
       <div id="admin-songs-list"><div class="loading"><div class="spinner"></div>Laden…</div></div>
     </div>
 
@@ -988,6 +999,7 @@ function renderAdminSongs() {
         <div style="font-size:.95rem;font-weight:500">${s.name}</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-accent" onclick="openAdmMixer('${s.id}')">Bearbeiten</button>
+          <button class="btn" onclick="exportSong('${s.id}')" title="Als ZIP exportieren">⬇ Export</button>
           <button class="btn btn-danger" onclick="deleteSong('${s.id}')">✕</button>
         </div>
       </div>
@@ -1413,6 +1425,177 @@ function setPitch(prefix, semitones) {
 }
 function ensSetPitch(v) { setPitch('ens', parseInt(v)); }
 function admSetPitch(v) { setPitch('adm', parseInt(v)); }
+
+// ── EXPORT / IMPORT ───────────────────────────────────────────────────────────
+async function exportSong(songId) {
+  const song = adminSongs.find(s=>s.id===songId);
+  if (!song) return;
+  toast('Export wird vorbereitet…', 60000);
+
+  try {
+    const { data:voices } = await sb.from('voices').select('*').eq('song_id', songId).order('position');
+    const zip = new JSZip();
+
+    // Build metadata
+    const metadata = {
+      name: song.name,
+      exported_at: new Date().toISOString(),
+      voices: (voices||[]).map(v => ({
+        position: v.position,
+        name: v.name,
+        volume: v.volume,
+        file_name: v.file_name || '',
+        storage_path: v.storage_path || null
+      })),
+      notes_name: song.notes_name || null,
+      notes_is_img: song.notes_is_img || false,
+      notes_path: song.notes_path || null,
+      markers: song.markers || null
+    };
+    zip.file('metadata.json', JSON.stringify(metadata, null, 2));
+
+    // Download and add each audio file
+    const audioFolder = zip.folder('audio');
+    for (const v of voices||[]) {
+      if (!v.storage_path) continue;
+      try {
+        const res = await fetch(pubUrl(v.storage_path));
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const filename = v.file_name || `stimme_${v.position}.mp3`;
+        audioFolder.file(filename, blob);
+        toast(`Lade: ${v.name}…`, 60000);
+      } catch(e) { console.warn('Could not fetch', v.storage_path); }
+    }
+
+    // Download and add notes
+    if (song.notes_path) {
+      try {
+        const res = await fetch(pubUrl(song.notes_path));
+        if (res.ok) {
+          const blob = await res.blob();
+          zip.file('notes/' + (song.notes_name || 'notenblatt'), blob);
+        }
+      } catch(e) {}
+    }
+
+    // Generate and download ZIP
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = song.name.replace(/[^a-zA-Z0-9äöüÄÖÜß -]/g,'_') + '.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✓ Export abgeschlossen');
+  } catch(e) {
+    toast('Export fehlgeschlagen: ' + e.message, 5000);
+  }
+}
+
+function importDragOver(e) {
+  e.preventDefault();
+  const dz = document.getElementById('import-dropzone');
+  dz.style.borderColor = 'var(--accent)';
+  dz.style.background = 'var(--surface2)';
+}
+
+function importDragLeave(e) {
+  const dz = document.getElementById('import-dropzone');
+  dz.style.borderColor = 'var(--surface3)';
+  dz.style.background = '';
+}
+
+function importDrop(e) {
+  e.preventDefault();
+  importDragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (file) processImportZip(file);
+}
+
+function importFromFile(input) {
+  const file = input.files[0];
+  if (file) processImportZip(file);
+  input.value = '';
+}
+
+async function processImportZip(file) {
+  const status = document.getElementById('import-status');
+  const dz = document.getElementById('import-dropzone');
+  dz.style.borderColor = 'var(--accent)';
+
+  try {
+    status.textContent = 'ZIP wird gelesen…';
+    const zip = await JSZip.loadAsync(file);
+
+    // Read metadata
+    const metaFile = zip.file('metadata.json');
+    if (!metaFile) { status.textContent = '⚠ Keine metadata.json gefunden'; return; }
+    const metadata = JSON.parse(await metaFile.async('string'));
+
+    status.textContent = 'Lied wird angelegt…';
+
+    // Create song in Supabase
+    const { data:song, error:songErr } = await sb.from('songs')
+      .insert({ name: metadata.name, markers: metadata.markers || null })
+      .select().single();
+    if (songErr) { status.textContent = '⚠ Fehler: ' + songErr.message; return; }
+
+    // Create voices
+    const voiceRows = (metadata.voices||[]).map(v => ({
+      song_id: song.id,
+      position: v.position,
+      name: v.name,
+      volume: v.volume,
+      muted: false
+    }));
+    const { data:voices } = await sb.from('voices').insert(voiceRows).select();
+
+    // Upload audio files
+    for (let idx = 0; idx < (metadata.voices||[]).length; idx++) {
+      const vmeta = metadata.voices[idx];
+      if (!vmeta.file_name) continue;
+      const audioFile = zip.file('audio/' + vmeta.file_name);
+      if (!audioFile) continue;
+
+      status.textContent = `Upload: ${vmeta.name}…`;
+      const blob = await audioFile.async('blob');
+      const safe = vmeta.file_name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const path = `${song.id}/voice_${idx}_${safe}`;
+      const { error:upErr } = await sb.storage.from(BUCKET).upload(path, blob, { upsert:true });
+      if (!upErr && voices?.[idx]) {
+        await sb.from('voices').update({ storage_path:path, file_name:vmeta.file_name }).eq('id', voices[idx].id);
+      }
+    }
+
+    // Upload notes
+    if (metadata.notes_name) {
+      const notesFile = zip.file('notes/' + metadata.notes_name);
+      if (notesFile) {
+        status.textContent = 'Notenblatt wird hochgeladen…';
+        const blob = await notesFile.async('blob');
+        const safe = metadata.notes_name.replace(/[^a-zA-Z0-9._-]/g,'_');
+        const path = `${song.id}/notes_${safe}`;
+        const { error:nErr } = await sb.storage.from(BUCKET).upload(path, blob, { upsert:true });
+        if (!nErr) {
+          await sb.from('songs').update({
+            notes_path: path,
+            notes_name: metadata.notes_name,
+            notes_is_img: metadata.notes_is_img
+          }).eq('id', song.id);
+        }
+      }
+    }
+
+    status.textContent = '✓ "' + metadata.name + '" erfolgreich importiert!';
+    dz.style.borderColor = 'var(--accent)';
+    await adminLoadSongs();
+    toast('✓ Lied importiert – bitte Ensemble zuweisen');
+  } catch(e) {
+    status.textContent = '⚠ Fehler: ' + e.message;
+    console.error('Import error', e);
+  }
+}
 
 // ── SECTION MARKERS ───────────────────────────────────────────────────────────
 async function admSaveMarker() {
