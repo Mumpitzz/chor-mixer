@@ -601,6 +601,18 @@ function makeEngine(prefix) {
       a.crossOrigin='anonymous';
       a.volume=0.8;
       a.preload='auto';
+      // Listen for natural end of audio
+      a.addEventListener('ended', function(){
+        // Only act if this is the last/primary track
+        const anyStillPlaying = audioEls.some(function(x){ return x && x.src && !x.paused && !x.ended; });
+        if(!anyStillPlaying && playing){
+          if(looping){
+            audioEls.forEach(function(x){if(x&&x.src){x.currentTime=0;x.play().catch(function(){});}});
+          } else {
+            stop();
+          }
+        }
+      });
       audioEls[i]=a;
       gainNodes[i]={
         _vol:0.8, _muted:false, _el:a,
@@ -645,15 +657,20 @@ function makeEngine(prefix) {
 
   function tick(){
     if(!playing||!duration)return;
-    const a=audioEls.find(x=>x&&x.src&&!x.paused);
-    if(!a)return;
+    const a=audioEls.find(x=>x&&x.src&&!x.paused&&!x.ended);
+    if(!a){
+      // All tracks ended or paused
+      const anyEnded=audioEls.some(x=>x&&x.src&&x.ended);
+      if(anyEnded){
+        if(looping){audioEls.forEach(x=>{if(x&&x.src){x.currentTime=0;x.play().catch(()=>{});}});}
+        else{stop();}
+      }
+      return;
+    }
     const elapsed=a.currentTime;
     const total=duration/tempoRate;
     if(looping&&loopStart>=0&&loopEnd>loopStart){
       if(elapsed>=loopEnd){audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});return;}
-    } else if(elapsed>=total-0.1){
-      if(looping){audioEls.forEach(x=>{if(x)x.currentTime=0;});}
-      else{stop();return;}
     }
     const pf=el('-progress-fill');if(pf)pf.style.width=(elapsed/total*100)+'%';
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
