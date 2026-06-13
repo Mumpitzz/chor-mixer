@@ -876,12 +876,11 @@ function makeEngine(prefix) {
   }
 
   async function _decodeAllPending(){
-    const pending = _rawBufs.map((ab,i) => ab && !bufs[i] ? {ab,i} : null).filter(Boolean);
+    const pending = _rawBufs.map(function(ab,i){ return (ab && !bufs[i]) ? {ab:ab,i:i} : null; }).filter(Boolean);
     if(!pending.length) return;
-    await Promise.all(pending.map(({ab,i}) => _decode(i,ab)));
+    await Promise.all(pending.map(function(item){ return _decode(item.i, item.ab); }));
   }
 
-  return {
   function togglePlay(){
     if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
     if(actx.state==='suspended') actx.resume();
