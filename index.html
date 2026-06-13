@@ -890,9 +890,6 @@ function makeEngine(prefix) {
     // iOS: AudioContext MUST be created/resumed synchronously in user gesture
     if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
     if(actx.state==='suspended') actx.resume();
-    if(playing) pauseAll(); else playAll();
-  }
-    skipBack(){ stopAll(); playOff(); },
     togglePlay: togglePlay,
     stop: function(){ stopAll(); playOff(); },
     pause: function(){ pauseAll(); },
@@ -905,8 +902,8 @@ function makeEngine(prefix) {
     setVolume: setVolume, setMuted: setMuted,
     reset: reset, loadFromUrl: loadFromUrl, loadFromBlob: loadFromBlob,
     _getAudioEls: function(){ return []; },
-    get playing(){ return playing; },
-    get gainNodes(){ return gainNodes; },
+    isPlaying: function(){ return playing; },
+    getGainNodes: function(){ return gainNodes; }
   };
 }
 
