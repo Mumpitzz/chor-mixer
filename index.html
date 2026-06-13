@@ -586,8 +586,7 @@ function makeEngine(prefix) {
 
   function ensureCtx(){
     if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
-    if(actx.state==='suspended') return actx.resume();
-    return Promise.resolve();
+    if(actx.state==='suspended') actx.resume();
   }
 
   function recalcDuration(){
@@ -646,7 +645,7 @@ function makeEngine(prefix) {
   }
 
   async function playAll(){
-    await ensureCtx();
+    ensureCtx();
     _ensureGainNodes();
     // Decode any pending raw buffers (iOS: first time after user gesture)
     await _decodeAllPending();
@@ -887,7 +886,14 @@ function makeEngine(prefix) {
     stop(){ stopAll(); playOff(); },
     pause(){ pauseAll(); },
     play(){ playAll(); },
-    togglePlay(){ if(playing) pauseAll(); else playAll(); }, // playAll is async, fire-and-forget
+  function togglePlay(){
+    // iOS: AudioContext MUST be created/resumed synchronously in user gesture
+    if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+    if(playing) pauseAll(); else playAll();
+  }
+    skipBack(){ stopAll(); playOff(); },
+    togglePlay, stop(){ stopAll(); playOff(); }, pause(){ pauseAll(); }, play(){ playAll(); },
     skipBack(){ stopAll(); playOff(); },
     seek, setTempo, setPitch, toggleLoop,
     setLoopPoint, clearLoop, updateLoopRegion,
