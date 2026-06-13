@@ -586,7 +586,8 @@ function makeEngine(prefix) {
 
   function ensureCtx(){
     if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
-    if(actx.state==='suspended') actx.resume();
+    if(actx.state==='suspended') return actx.resume();
+    return Promise.resolve();
   }
 
   function recalcDuration(){
@@ -645,6 +646,7 @@ function makeEngine(prefix) {
   }
 
   async function playAll(){
+    await ensureCtx();
     _ensureGainNodes();
     // Decode any pending raw buffers (iOS: first time after user gesture)
     await _decodeAllPending();
@@ -1815,7 +1817,7 @@ async function saveAnnouncement() {
 
 async function loadEnsAnnouncements(ensId) {
   const el = document.getElementById('ens-announcements');
-  if (!el) return;
+  if (!el || !ensId) return;
   try {
     const { data } = await sb.from('announcements')
       .select('*').eq('ensemble_id', ensId)
@@ -1847,9 +1849,7 @@ loadEnsSong = async function(id) {
       renderEnsMarkers(markers);
     } catch(e) {}
   }
-  loadEnsAnnouncements(id.split('_')[0]); // will use ensemble_id from song
-  // Actually load by ensemble
-  if (ensSong) loadEnsAnnouncements(ensSong.ensemble_id);
+  loadEnsAnnouncements(ensSong?.ensemble_id || session?.ensemble?.id);
 };
 
 // ── PATCH openAdmMixer to load markers ────────────────────────────────────────
@@ -1996,6 +1996,27 @@ function endLoopDrag() {
   document.removeEventListener('touchmove', onLoopDrag);
   document.removeEventListener('touchend', endLoopDrag);
 }
+
+// ── IOS AUDIO UNLOCK ──────────────────────────────────────────────────────────
+// iOS Safari requires AudioContext to be created AND resumed inside a user gesture
+let _iosUnlocked = false;
+function unlockAudio() {
+  if (_iosUnlocked) return;
+  _iosUnlocked = true;
+  // Create a temporary silent buffer to unlock audio on iOS
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    ctx.resume().then(() => ctx.close());
+  } catch(e) {}
+}
+// Attach to first touch/click anywhere
+document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+document.addEventListener('mousedown',  unlockAudio, { once: true, passive: true });
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
