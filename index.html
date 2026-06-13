@@ -659,7 +659,6 @@ function makeEngine(prefix) {
     if(!playing||!duration)return;
     const a=audioEls.find(x=>x&&x.src&&!x.paused&&!x.ended);
     if(!a){
-      // All tracks ended or paused
       const anyEnded=audioEls.some(x=>x&&x.src&&x.ended);
       if(anyEnded){
         if(looping){audioEls.forEach(x=>{if(x&&x.src){x.currentTime=0;x.play().catch(()=>{});}});}
@@ -667,10 +666,12 @@ function makeEngine(prefix) {
       }
       return;
     }
-    const elapsed=a.currentTime;
-    const total=duration/tempoRate;
+    // a.currentTime runs at playbackRate speed, so divide by tempoRate for real-time display
+    const rawTime=a.currentTime;
+    const elapsed=rawTime/tempoRate; // real-world seconds elapsed
+    const total=duration/tempoRate;  // real-world total duration
     if(looping&&loopStart>=0&&loopEnd>loopStart){
-      if(elapsed>=loopEnd){audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart;});return;}
+      if(elapsed>=loopEnd){audioEls.forEach(x=>{if(x&&x.src)x.currentTime=loopStart*tempoRate;});return;}
     }
     const pf=el('-progress-fill');if(pf)pf.style.width=(elapsed/total*100)+'%';
     const tc=el('-time-cur');if(tc)tc.textContent=fmt(elapsed);
@@ -680,10 +681,11 @@ function makeEngine(prefix) {
     const track=el('-progress-track');if(!track)return;
     const rect=track.getBoundingClientRect();
     const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-    const pos=pct*duration/tempoRate;
-    audioEls.forEach(a=>{if(a&&a.src)a.currentTime=pos;});
+    const realPos=pct*duration/tempoRate; // real-world seconds
+    // currentTime runs at playbackRate speed, so set to realPos (audio position = realPos since preservesPitch)
+    audioEls.forEach(a=>{if(a&&a.src)a.currentTime=realPos;});
     const pf=el('-progress-fill');if(pf)pf.style.width=(pct*100)+'%';
-    const tc=el('-time-cur');if(tc)tc.textContent=fmt(pos);
+    const tc=el('-time-cur');if(tc)tc.textContent=fmt(realPos);
   }
 
   function setTempo(val){
