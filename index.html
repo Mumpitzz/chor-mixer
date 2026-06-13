@@ -893,18 +893,18 @@ function makeEngine(prefix) {
     if(playing) pauseAll(); else playAll();
   }
     skipBack(){ stopAll(); playOff(); },
-    togglePlay, stop(){ stopAll(); playOff(); }, pause(){ pauseAll(); }, play(){ playAll(); },
-    skipBack(){ stopAll(); playOff(); },
-    seek, setTempo, setPitch, toggleLoop,
-    setLoopPoint, clearLoop, updateLoopRegion,
-    setLoopStartVal, setLoopEndVal,
-    getLoopStart, getLoopEnd, getDuration, getTempoRate,
-    // Volume
-    setVolume, setMuted,
-    // Load
-    reset, loadFromUrl, loadFromBlob,
-    // Compat accessors
-    _getAudioEls(){ return []; },
+    togglePlay: togglePlay,
+    stop: function(){ stopAll(); playOff(); },
+    pause: function(){ pauseAll(); },
+    play: function(){ playAll(); },
+    skipBack: function(){ stopAll(); playOff(); },
+    seek: seek, setTempo: setTempo, setPitch: setPitch, toggleLoop: toggleLoop,
+    setLoopPoint: setLoopPoint, clearLoop: clearLoop, updateLoopRegion: updateLoopRegion,
+    setLoopStartVal: setLoopStartVal, setLoopEndVal: setLoopEndVal,
+    getLoopStart: getLoopStart, getLoopEnd: getLoopEnd, getDuration: getDuration, getTempoRate: getTempoRate,
+    setVolume: setVolume, setMuted: setMuted,
+    reset: reset, loadFromUrl: loadFromUrl, loadFromBlob: loadFromBlob,
+    _getAudioEls: function(){ return []; },
     get playing(){ return playing; },
     get gainNodes(){ return gainNodes; },
   };
