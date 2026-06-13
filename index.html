@@ -882,14 +882,13 @@ function makeEngine(prefix) {
   }
 
   return {
-    // Transport
-    stop(){ stopAll(); playOff(); },
-    pause(){ pauseAll(); },
-    play(){ playAll(); },
   function togglePlay(){
-    // iOS: AudioContext MUST be created/resumed synchronously in user gesture
     if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
     if(actx.state==='suspended') actx.resume();
+    if(playing) pauseAll(); else playAll();
+  }
+
+  return {
     togglePlay: togglePlay,
     stop: function(){ stopAll(); playOff(); },
     pause: function(){ pauseAll(); },
