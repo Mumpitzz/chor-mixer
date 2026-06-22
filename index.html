@@ -665,28 +665,18 @@ function makeEngine(prefix) {
   function startSources() {
     ensureGainNodes();
     stopSrcs();
-    // For tempo: use playbackRate with preservesPitch = true (tempo only, no pitch change)
-    // For pitch: multiply by pitch factor (only when pitchSemitones != 0)
-    var tempoOnly = pitchSemitones === 0;
-    var rate = tempoOnly ? tempoRate : tempoRate * Math.pow(2, pitchSemitones/12);
+    var pitchFactor = Math.pow(2, pitchSemitones/12);
     var now = actx.currentTime;
-    playStartAt = now - pauseOffset / rate;
+    playStartAt = now - pauseOffset / tempoRate;
     bufs.forEach(function(buf, i) {
       if (!buf) return;
       var src = actx.createBufferSource();
       src.buffer = buf;
-      src.playbackRate.value = rate;
-      // preservesPitch corrects pitch when only tempo changes
-      // When pitchSemitones != 0, we intentionally bypass it
-      if (tempoOnly) {
-        src.preservesPitch = true;
-        src.mozPreservesPitch = true;
-        src.webkitPreservesPitch = true;
-      } else {
-        src.preservesPitch = false;
-        src.mozPreservesPitch = false;
-        src.webkitPreservesPitch = false;
-      }
+      // Always set preservesPitch=true so tempo doesn't affect pitch
+      src.preservesPitch = true;
+      src.mozPreservesPitch = true;
+      src.webkitPreservesPitch = true;
+      src.playbackRate.value = tempoRate * pitchFactor;
       src.connect(gainNodes[i] || actx.destination);
       src.start(now, pauseOffset);
       srcNodes[i] = src;
@@ -714,16 +704,14 @@ function makeEngine(prefix) {
   }
 
   function pauseAll() {
-    var rate = tempoRate * Math.pow(2, pitchSemitones/12);
-    pauseOffset = Math.min((actx.currentTime - playStartAt) * rate, duration);
+    pauseOffset = Math.min((actx.currentTime - playStartAt) * tempoRate, duration);
     stopSrcs();
     playOff();
   }
 
   function tick() {
     if (!playing || !duration) return;
-    var rate = tempoRate * Math.pow(2, pitchSemitones/12);
-    var elapsed = (actx.currentTime - playStartAt) * rate;
+    var elapsed = (actx.currentTime - playStartAt) * tempoRate;
     if (looping && loopStart >= 0 && loopEnd > loopStart) {
       if (elapsed >= loopEnd) {
         pauseOffset = loopStart;
@@ -1059,7 +1047,7 @@ function ensToggleMute(i) {
   ensSong.voices[i].muted=!ensSong.voices[i].muted;
   document.getElementById('ens-tc-'+i).classList.toggle('muted',ensSong.voices[i].muted);
   document.getElementById('ens-mb-'+i).classList.toggle('mute-active',ensSong.voices[i].muted);
-  ensEngine.getGainNodes()[i].setMuted(ensSong.voices[i].muted); ensEngine.setVolume(i, ensSong.voices[i].volume/100);
+  ensEngine.setMuted(i, ensSong.voices[i].muted, ensSong.voices[i].volume/100);
 }
 function ensToggleSolo(i) {
   if(!ensSong) return;
@@ -1076,7 +1064,7 @@ function ensToggleSolo(i) {
   }
   const anySolo=ensSong.voices.some(v=>v.soloed);
   ensSong.voices.forEach((v,j)=>{
-    if(ensEngine.getGainNodes()[j]){ ensEngine.getGainNodes()[j].setMuted(anySolo?!v.soloed:v.muted); ensEngine.setVolume(j, v.volume/100); }
+    ensEngine.setMuted(j, anySolo?!v.soloed:v.muted, v.volume/100);
   });
 }
 function ensTogglePlay(){ensEngine.togglePlay();}
@@ -1347,7 +1335,7 @@ function admToggleMute(i) {
   admSong.voices[i].muted=!admSong.voices[i].muted;
   document.getElementById('adm-tc-'+i).classList.toggle('muted',admSong.voices[i].muted);
   document.getElementById('adm-mb-'+i).classList.toggle('mute-active',admSong.voices[i].muted);
-  admEngine.getGainNodes()[i].setMuted(admSong.voices[i].muted); admEngine.setVolume(i, admSong.voices[i].volume/100);
+  admEngine.setMuted(i, admSong.voices[i].muted, admSong.voices[i].volume/100);
 }
 function admToggleSolo(i) {
   if(!admSong) return;
@@ -1364,7 +1352,7 @@ function admToggleSolo(i) {
   }
   const anySolo=admSong.voices.some(v=>v.soloed);
   admSong.voices.forEach((v,j)=>{
-    if(admEngine.getGainNodes()[j]){ admEngine.getGainNodes()[j].setMuted(anySolo?!v.soloed:v.muted); admEngine.setVolume(j, v.volume/100); }
+    admEngine.setMuted(j, anySolo?!v.soloed:v.muted, v.volume/100);
   });
 }
 async function admDeleteVoice(i) {
