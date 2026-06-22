@@ -665,7 +665,10 @@ function makeEngine(prefix) {
   function startSources() {
     ensureGainNodes();
     stopSrcs();
-    var rate = tempoRate * Math.pow(2, pitchSemitones/12);
+    // For tempo: use playbackRate with preservesPitch = true (tempo only, no pitch change)
+    // For pitch: multiply by pitch factor (only when pitchSemitones != 0)
+    var tempoOnly = pitchSemitones === 0;
+    var rate = tempoOnly ? tempoRate : tempoRate * Math.pow(2, pitchSemitones/12);
     var now = actx.currentTime;
     playStartAt = now - pauseOffset / rate;
     bufs.forEach(function(buf, i) {
@@ -673,9 +676,17 @@ function makeEngine(prefix) {
       var src = actx.createBufferSource();
       src.buffer = buf;
       src.playbackRate.value = rate;
-      src.preservesPitch = true;
-      src.mozPreservesPitch = true;
-      src.webkitPreservesPitch = true;
+      // preservesPitch corrects pitch when only tempo changes
+      // When pitchSemitones != 0, we intentionally bypass it
+      if (tempoOnly) {
+        src.preservesPitch = true;
+        src.mozPreservesPitch = true;
+        src.webkitPreservesPitch = true;
+      } else {
+        src.preservesPitch = false;
+        src.mozPreservesPitch = false;
+        src.webkitPreservesPitch = false;
+      }
       src.connect(gainNodes[i] || actx.destination);
       src.start(now, pauseOffset);
       srcNodes[i] = src;
@@ -856,13 +867,16 @@ function makeEngine(prefix) {
   // ── VOLUME / MUTE ──────────────────────────────────────────────────────────
   function setVolume(i, vol) {
     volumes[i] = vol;
-    if (gainNodes[i]) gainNodes[i].gain.setTargetAtTime(vol, actx.currentTime, 0.01);
+    if (gainNodes[i] && actx) {
+      gainNodes[i].gain.setTargetAtTime(vol, actx.currentTime, 0.01);
+    }
   }
   function setMuted(i, muted, vol) {
-    var v = muted ? 0 : (vol !== undefined ? vol : (volumes[i]||0.8));
-    volumes[i] = muted ? (volumes[i]||vol||0.8) : v;
-    if (gainNodes[i]) gainNodes[i].gain.setTargetAtTime(v, actx.currentTime, 0.01);
-    else volumes[i] = v;
+    var targetVol = muted ? 0 : (vol !== undefined ? vol : (volumes[i] || 0.8));
+    if (!muted && vol !== undefined) volumes[i] = vol;
+    if (gainNodes[i] && actx) {
+      gainNodes[i].gain.setTargetAtTime(targetVol, actx.currentTime, 0.01);
+    }
   }
 
   // ── RESET ──────────────────────────────────────────────────────────────────
@@ -897,8 +911,14 @@ function makeEngine(prefix) {
 
   function storeRaw(i, ab) {
     rawBufs[i] = ab;
-    // Try to decode now if context already running (desktop/Mac)
-    if (actx && actx.state === 'running') {
+    // On desktop: create context immediately and decode
+    // (no user gesture restriction on desktop)
+    if (!actx) {
+      try {
+        actx = new (window.AudioContext||window.webkitAudioContext)();
+      } catch(e) {}
+    }
+    if (actx && (actx.state === 'running' || actx.state === 'suspended')) {
       return new Promise(function(resolve) {
         actx.decodeAudioData(ab.slice(0), function(decoded) {
           bufs[i] = decoded;
@@ -907,7 +927,7 @@ function makeEngine(prefix) {
         }, function() { resolve(false); });
       });
     }
-    // On iOS: estimate duration from bitrate for display
+    // Fallback: estimate duration for display
     var estimatedDur = ab.byteLength / (128000/8);
     if (estimatedDur > duration) {
       duration = estimatedDur;
